@@ -282,6 +282,7 @@ extension Array where Element == CuratedSettingEntry {
                 ),
                 synonyms: "session persistence keep local sessions alive local tmux local-tmux tmux detach reattach crash update quit durable terminal process scrollback"
             ),
+            .init(section: .terminal, id: "per-pane-shell-history", title: String(localized: "settings.terminal.perPaneShellHistory", defaultValue: "Per-Pane Shell History"), synonyms: "Per-Pane Shell History terminal.perPaneShellHistory per pane shell history histfile isolated separate command history zsh bash up arrow recall"),
             .init(section: .terminal, id: "agent-hibernation", title: String(localized: "settings.terminal.agentHibernation", defaultValue: "Agent Hibernation"), synonyms: "Agent Hibernation terminal.agentHibernation.enabled idle hibernate suspend background agents claude code codex opencode live terminals"),
             .init(section: .terminal, id: "agent-hibernation-idle", title: String(localized: "settings.terminal.agentHibernation.idleSeconds", defaultValue: "Hibernate After Idle Seconds"), synonyms: "Hibernate After Idle Seconds terminal.agentHibernation.idleSeconds idle seconds timeout delay hibernate suspend"),
             .init(section: .terminal, id: "agent-hibernation-max", title: String(localized: "settings.terminal.agentHibernation.maxLiveTerminals", defaultValue: "Max Live Agent Terminals"), synonyms: "Max Live Agent Terminals terminal.agentHibernation.maxLiveTerminals max live agent terminals limit count hibernate"),

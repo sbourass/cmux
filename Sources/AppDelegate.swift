@@ -3790,6 +3790,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
         // Before the restore guard, so a skipped restore still drops stale checkpoints.
         prepareSessionScrollbackCheckpointsForLaunch(previousLaunchWasUnclean: previousSessionLaunchWasUnclean)
+        // Fork: always load the snapshots for orphan-sweep reference purposes,
+        // even when restore is disabled, and sweep before the restore guard so
+        // a skipped restore still reaps orphans. Otherwise a user who toggles
+        // restore off, launches the app, and toggles restore back on would lose
+        // every per-pane history file in between. Loading is a pure disk read.
+        // Only sweep when at least one snapshot loaded, to tell orphans from
+        // valid files; if both loads fail (first launch, corrupt files), skip
+        // rather than mass-delete.
+        let liveSnapshot = sessionSnapshotStore.load(fileURL: nil)
+        let backupSnapshot = sessionSnapshotStore.loadReopenSessionSnapshot(fileURL: nil)
+        if liveSnapshot != nil || backupSnapshot != nil {
+            let referenced = SessionPanelHistoryStore
+                .referencedHistoryFileIds(in: liveSnapshot)
+                .union(SessionPanelHistoryStore.referencedHistoryFileIds(in: backupSnapshot))
+            SessionPanelHistoryStore.sweepOrphans(referenced: referenced)
+        }
         guard SessionRestorePolicy.shouldAttemptRestore(),
               !didHandleExplicitOpenIntentAtStartup else { return }
         // After a crash the primary snapshot comes from the 8 s autosave, which
