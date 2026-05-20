@@ -5299,6 +5299,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
         return window === headlessStartupWindow
     }
     let id: UUID
+    /// Stable identifier for this surface's per-pane shell history file.
+    /// Survives session save/restore so reopening a workspace reloads the same
+    /// `<historyFileId>.zsh_history` rather than mixing into the shared global.
+    let historyFileId: UUID
     private(set) var tabId: UUID
     /// Port ordinal for CMUX_PORT range assignment. Captured at construction so
     /// every runtime startup path uses the same immutable workspace port range.
@@ -5466,13 +5470,15 @@ final class TerminalSurface: Identifiable, ObservableObject {
         initialInput: String? = nil,
         initialEnvironmentOverrides: [String: String] = [:],
         additionalEnvironment: [String: String] = [:],
-        focusPlacement: TerminalSurfaceFocusPlacement = .workspace
+        focusPlacement: TerminalSurfaceFocusPlacement = .workspace,
+        historyFileId: UUID? = nil
     ) {
         #if DEBUG
         dispatchPrecondition(condition: .onQueue(.main))
         #endif
 
         self.id = UUID()
+        self.historyFileId = historyFileId ?? UUID()
         self.tabId = tabId
         self.surfaceContext = context
         self.configTemplate = configTemplate
@@ -6256,6 +6262,21 @@ final class TerminalSurface: Identifiable, ObservableObject {
             to: &env,
             protectedKeys: &protectedStartupEnvironmentKeys
         )
+        // Per-pane shell history file. The shell integration scripts read this
+        // env var and switch HISTFILE to it after the user's rc files run, so
+        // each pane's command history is isolated and survives session restore.
+        // Skipped entirely when the user has disabled per-pane history in
+        // settings — the shell then falls back to its default global history.
+        if PerPaneShellHistorySettings.isEnabled() {
+            let historyEnv = SessionPanelHistoryStore.historyEnvironment(for: historyFileId)
+            if let historyPath = historyEnv[SessionPanelHistoryStore.environmentKey] {
+                setManagedEnvironmentValue(SessionPanelHistoryStore.environmentKey, historyPath)
+            } else {
+                #if DEBUG
+                cmuxDebugLog("history.dirCreate.failed panel=\(id.uuidString.prefix(5)) historyId=\(historyFileId.uuidString.prefix(5))")
+                #endif
+            }
+        }
         setManagedEnvironmentValue("CMUX_SOCKET", "")
         if let inheritedClaudeConfigDir = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"],
            !inheritedClaudeConfigDir.isEmpty {
