@@ -1708,3 +1708,19 @@ unset -f _cmux_fix_path
 _cmux_detect_send_tool
 
 _cmux_install_prompt_command
+
+# Per-pane shell history. cmux assigns each terminal pane its own history file
+# at ${CMUX_PANEL_HISTFILE}. This integration file is sourced from
+# PROMPT_COMMAND on the first prompt, by which time .bashrc has already run
+# and HISTFILE is settled, so we can switch directly without deferring.
+if [[ -n "${CMUX_PANEL_HISTFILE:-}" ]]; then
+    HISTFILE="$CMUX_PANEL_HISTFILE"
+    # Drop the in-memory history bash loaded from the old HISTFILE
+    # (typically ~/.bash_history) at startup. `history -r` would otherwise
+    # APPEND the new file's entries to that existing list.
+    history -c
+    history -r 2>/dev/null
+    # Prevent inner shells (e.g. running `bash` again inside this pane) from
+    # inheriting the var and interleaving their history into this pane's file.
+    unset CMUX_PANEL_HISTFILE
+fi

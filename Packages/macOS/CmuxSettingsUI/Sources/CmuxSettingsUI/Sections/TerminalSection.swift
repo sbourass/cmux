@@ -24,6 +24,7 @@ public struct TerminalSection: View {
     @State private var scrollBar: DefaultsValueModel<Bool>
     @State private var copyOnSelect: DefaultsValueModel<Bool>
     @State private var autoResume: DefaultsValueModel<Bool>
+    @State private var perPaneHistory: DefaultsValueModel<Bool>
     @State private var hibernation: DefaultsValueModel<Bool>
     @State private var idleSeconds: DefaultsValueModel<Double>
     @State private var maxLive: DefaultsValueModel<Int>
@@ -50,6 +51,7 @@ public struct TerminalSection: View {
         _scrollBar = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.terminal.showScrollBar))
         _copyOnSelect = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.terminal.copyOnSelect))
         _autoResume = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.terminal.autoResumeAgentSessions))
+        _perPaneHistory = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.terminal.perPaneShellHistory))
         _hibernation = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.terminal.agentHibernationEnabled))
         _idleSeconds = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.terminal.agentHibernationIdleSeconds))
         _maxLive = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.terminal.agentHibernationMaxLiveTerminals))
@@ -379,6 +381,19 @@ public struct TerminalSection: View {
                     .labelsHidden()
                     .controlSize(.small)
                     .accessibilityIdentifier("SettingsTerminalAgentAutoResumeToggle")
+            }
+            SettingsCardDivider()
+            SettingsCardRow(
+                configurationReview: .json("terminal.perPaneShellHistory"),
+                String(localized: "settings.terminal.perPaneShellHistory", defaultValue: "Per-Pane Shell History"),
+                subtitle: perPaneHistory.current
+                    ? String(localized: "settings.terminal.perPaneShellHistory.subtitleOn", defaultValue: "Each terminal pane gets its own command history (HISTFILE) that survives quitting and reopening. New panes start empty.")
+                    : String(localized: "settings.terminal.perPaneShellHistory.subtitleOff", defaultValue: "All panes share your shell's default history file (typically ~/.zsh_history). Takes effect for new panes.")
+            ) {
+                Toggle("", isOn: Binding(get: { perPaneHistory.current }, set: { perPaneHistory.set($0) }))
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .accessibilityIdentifier("SettingsTerminalPerPaneShellHistoryToggle")
             }
             SettingsCardDivider()
             SettingsCardRow(
