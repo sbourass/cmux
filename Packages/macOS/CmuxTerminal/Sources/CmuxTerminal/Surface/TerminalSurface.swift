@@ -150,6 +150,11 @@ public final class TerminalSurface: Identifiable, ObservableObject {
     /// the same ``id`` but a different lifecycle identity.
     public let terminalLifecycleId: UUID
 
+    /// Stable identifier for this surface's per-pane shell history file.
+    /// Survives session save/restore so reopening a workspace reloads the same
+    /// `<historyFileId>.zsh_history` rather than mixing into the shared global.
+    public let historyFileId: UUID
+
     /// The owning workspace id.
     public private(set) var tabId: UUID
 
@@ -501,10 +506,12 @@ public final class TerminalSurface: Identifiable, ObservableObject {
         manualInputKeyNameResolver: (@MainActor @Sendable (ghostty_input_key_s) -> String?)? = nil,
         runtimeSpawnPolicy: TerminalSurfaceRuntimeSpawnPolicy = .immediate,
         preparePaneHost: @Sendable @MainActor (any TerminalSurfacePaneHosting) -> Void = { _ in },
+        historyFileId: UUID? = nil,
         dependencies: TerminalSurfaceRuntimeDependencies
     ) {
         self.id = id
         self.terminalLifecycleId = UUID()
+        self.historyFileId = historyFileId ?? UUID()
         self.tabId = tabId
         self.surfaceContext = context
         self.configTemplate = configTemplate

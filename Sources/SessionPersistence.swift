@@ -1433,6 +1433,10 @@ struct SessionTerminalPanelSnapshot: Codable, Sendable {
     /// Whether the agent process was actively running when this snapshot was captured.
     /// Nil means unknown (legacy snapshots); treated as true for backwards compatibility.
     var wasAgentRunning: Bool?
+    /// Stable identifier for the pane's persistent shell history file. Legacy
+    /// snapshots without this field get a fresh UUID on restore (no history
+    /// recoverable for old panes, but no breakage).
+    var historyFileId: UUID?
 
     init(
         workingDirectory: String? = nil,
@@ -1447,7 +1451,8 @@ struct SessionTerminalPanelSnapshot: Codable, Sendable {
         textBoxDraft: SessionTextBoxInputDraftSnapshot? = nil,
         isRemoteTerminal: Bool? = nil,
         remotePTYSessionID: String? = nil,
-        wasAgentRunning: Bool? = nil
+        wasAgentRunning: Bool? = nil,
+        historyFileId: UUID? = nil
     ) {
         self.workingDirectory = workingDirectory
         self.fontSize = fontSize
@@ -1462,6 +1467,7 @@ struct SessionTerminalPanelSnapshot: Codable, Sendable {
         self.isRemoteTerminal = isRemoteTerminal
         self.remotePTYSessionID = remotePTYSessionID
         self.wasAgentRunning = wasAgentRunning
+        self.historyFileId = historyFileId
     }
 }
 
@@ -1891,6 +1897,104 @@ extension AppSessionSnapshot: SessionSnapshotRepresenting {
     /// treats an empty-window snapshot as unusable (empty states remove the file instead
     /// of writing it), matching the legacy `!snapshot.windows.isEmpty` usability check.
     var hasWindows: Bool { !windows.isEmpty }
+}
+
+enum SessionPanelHistoryStore {
+    static let environmentKey = "CMUX_PANEL_HISTFILE"
+    private static let directoryName = "panel-history"
+    private static let fileExtension = "zsh_history"
+
+    /// Build the env var that points zsh/bash at the per-pane history file for
+    /// this surface. Creates the parent directory on demand. Returns an empty
+    /// dictionary if the directory cannot be created — the shell then falls
+    /// back to its default global history file.
+    static func historyEnvironment(for historyFileId: UUID) -> [String: String] {
+        guard let url = historyFileURL(for: historyFileId) else { return [:] }
+        let directory = url.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+        } catch {
+            return [:]
+        }
+        return [environmentKey: url.path]
+    }
+
+    static func historyFileURL(for historyFileId: UUID) -> URL? {
+        guard let appSupport = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first else {
+            return nil
+        }
+        return appSupport
+            .appendingPathComponent("cmux", isDirectory: true)
+            .appendingPathComponent(directoryName, isDirectory: true)
+            .appendingPathComponent(historyFileId.uuidString, isDirectory: false)
+            .appendingPathExtension(fileExtension)
+    }
+
+    /// Directory containing all per-pane history files. Used by the orphan
+    /// sweep at app start.
+    static func historyDirectoryURL() -> URL? {
+        guard let appSupport = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first else {
+            return nil
+        }
+        return appSupport
+            .appendingPathComponent("cmux", isDirectory: true)
+            .appendingPathComponent(directoryName, isDirectory: true)
+    }
+
+    /// Delete the per-pane history file. No-op if the file does not exist or
+    /// the path can't be resolved.
+    static func deleteHistoryFile(for historyFileId: UUID) {
+        guard let url = historyFileURL(for: historyFileId) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Remove every history file whose UUID is NOT in `referenced`.
+    /// Used at app start to reap files left behind by crashes, deleted
+    /// workspaces, or other paths that bypassed normal cleanup.
+    static func sweepOrphans(referenced: Set<UUID>) {
+        guard let dir = historyDirectoryURL() else { return }
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        for url in entries {
+            // Files are named "<uuid>.zsh_history"; the UUID is the
+            // basename without extensions.
+            let name = url.deletingPathExtension().lastPathComponent
+            guard let id = UUID(uuidString: name) else { continue }
+            if !referenced.contains(id) {
+                try? fm.removeItem(at: url)
+            }
+        }
+    }
+
+    /// Walk an app session snapshot and collect every per-pane history UUID it
+    /// references. Used to seed `sweepOrphans` so we only reap files that no
+    /// snapshot points at.
+    static func referencedHistoryFileIds(in snapshot: AppSessionSnapshot?) -> Set<UUID> {
+        guard let snapshot else { return [] }
+        var ids: Set<UUID> = []
+        for window in snapshot.windows {
+            for workspace in window.tabManager.workspaces {
+                for panel in workspace.panels {
+                    if let id = panel.terminal?.historyFileId {
+                        ids.insert(id)
+                    }
+                }
+            }
+        }
+        return ids
+    }
 }
 
 enum SessionScrollbackReplayStore {
