@@ -203,7 +203,8 @@ final class TerminalPanel: Panel, ObservableObject {
         additionalEnvironment: [String: String] = [:],
         focusPlacement: TerminalSurfaceFocusPlacement = .workspace,
         isRemoteTerminal: Bool = false,
-        runtimeSpawnPolicy: TerminalSurfaceRuntimeSpawnPolicy = .immediate
+        runtimeSpawnPolicy: TerminalSurfaceRuntimeSpawnPolicy = .immediate,
+        historyFileId: UUID? = nil
     ) {
         let surface = TerminalSurface(
             id: id,
@@ -220,7 +221,8 @@ final class TerminalPanel: Panel, ObservableObject {
             focusPlacement: focusPlacement,
             isRemoteTerminal: isRemoteTerminal,
             runtimeSpawnPolicy: runtimeSpawnPolicy,
-            preparePaneHost: { Self.prepareNotificationScrollReplay(for: $0, environment: additionalEnvironment) }
+            preparePaneHost: { Self.prepareNotificationScrollReplay(for: $0, environment: additionalEnvironment) },
+            historyFileId: historyFileId
         )
         self.init(workspaceId: workspaceId, surface: surface)
         if Self.startsAtOwnedPrompt(
