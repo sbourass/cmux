@@ -697,7 +697,8 @@ extension Workspace {
                 hasReceivedExplicitInput: terminalPanel.hasReceivedExplicitInput,
                 claudeBackgroundViewer: localTmuxStartCommand == nil
                     ? claudeBackgroundViewerForSnapshot(panelId: panelId, terminal: terminalPanel)
-                    : nil
+                    : nil,
+                historyFileId: terminalPanel.surface.historyFileId
             )
             browserSnapshot = nil
             markdownSnapshot = nil
@@ -2049,7 +2050,8 @@ extension Workspace {
                     representedChangeTokens: Set(
                         snapshot.terminal?.fontSizeChangeTokens ?? []
                     )
-                )
+                ),
+                historyFileId: snapshot.terminal?.historyFileId
             ) else {
                 if let replayFileURL { try? FileManager.default.removeItem(at: replayFileURL) }
                 // The claim taken above (if any) was for a launch that never
@@ -9506,7 +9508,8 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
         terminalFontSizeCreationPolicy: TerminalFontSizeCreationPolicy = .inherit,
         inheritWorkingDirectoryFallback: Bool = false,
         workingDirectoryFallbackSourcePanelId: UUID? = nil,
-        allowTextBoxFocusDefault: Bool = true
+        allowTextBoxFocusDefault: Bool = true,
+        historyFileId: UUID? = nil
     ) -> TerminalPanel? {
         return newTerminalSurfaceOutcome(
             inPane: paneId,
@@ -9527,7 +9530,8 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
             terminalFontSizeCreationPolicy: terminalFontSizeCreationPolicy,
             inheritWorkingDirectoryFallback: inheritWorkingDirectoryFallback,
             workingDirectoryFallbackSourcePanelId: workingDirectoryFallbackSourcePanelId,
-            allowTextBoxFocusDefault: allowTextBoxFocusDefault
+            allowTextBoxFocusDefault: allowTextBoxFocusDefault,
+            historyFileId: historyFileId
         ).panel
     }
 
@@ -9553,7 +9557,8 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
         terminalFontSizeCreationPolicy: TerminalFontSizeCreationPolicy = .inherit,
         inheritWorkingDirectoryFallback: Bool = false,
         workingDirectoryFallbackSourcePanelId: UUID? = nil,
-        allowTextBoxFocusDefault: Bool = true
+        allowTextBoxFocusDefault: Bool = true,
+        historyFileId: UUID? = nil
     ) -> TerminalPanelCreationOutcome {
         guard !isRetiredFromOwningTabManager else { return .failed }
         // In a remote tmux mirror, a new tab means "create a tmux window"; never
@@ -9620,7 +9625,8 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
             terminalFontSizeCreationPolicy: terminalFontSizeCreationPolicy,
             inheritWorkingDirectoryFallback: inheritWorkingDirectoryFallback,
             workingDirectoryFallbackSourcePanelId: workingDirectoryFallbackSourcePanelId,
-            allowTextBoxFocusDefault: allowTextBoxFocusDefault
+            allowTextBoxFocusDefault: allowTextBoxFocusDefault,
+            historyFileId: historyFileId
         ) else { return .failed }
         return .created(panel)
     }
@@ -9644,7 +9650,8 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
         terminalFontSizeCreationPolicy: TerminalFontSizeCreationPolicy,
         inheritWorkingDirectoryFallback: Bool,
         workingDirectoryFallbackSourcePanelId: UUID?,
-        allowTextBoxFocusDefault: Bool
+        allowTextBoxFocusDefault: Bool,
+        historyFileId: UUID?
     ) -> TerminalPanel? {
         let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
         let previousFocusedPanelId = focusedPanelId
@@ -9715,7 +9722,8 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
             runtimeSpawnPolicy: terminalStartupRestoreCoordinator.runtimeSpawnPolicy(
                 requestedPolicy: runtimeSpawnPolicy,
                 willRunStartupInput: startupRestoreAgent != nil && initialInput != nil
-            )
+            ),
+            historyFileId: historyFileId
         )
         configureNewTerminalPanel(
             newPanel,
