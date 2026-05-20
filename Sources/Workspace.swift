@@ -511,7 +511,8 @@ extension Workspace {
                 agent: effectiveRestorableAgent,
                 tmuxStartCommand: restorableTmuxStartCommand,
                 resumeBinding: resumeBinding,
-                wasAgentRunning: agentWasRunning
+                wasAgentRunning: agentWasRunning,
+                historyFileId: terminalPanel.surface.historyFileId
             )
             browserSnapshot = nil
             markdownSnapshot = nil
@@ -968,7 +969,8 @@ extension Workspace {
                 initialCommand: restoredTmuxStartupScript?.path,
                 tmuxStartCommand: restoredTmuxStartCommand,
                 initialInput: restoredStartupInput,
-                startupEnvironment: replayEnvironment
+                startupEnvironment: replayEnvironment,
+                historyFileId: snapshot.terminal?.historyFileId
             ) else {
                 return nil
             }
@@ -10552,7 +10554,8 @@ final class Workspace: Identifiable, ObservableObject {
         initialCommand: String? = nil,
         tmuxStartCommand: String? = nil,
         initialInput: String? = nil,
-        startupEnvironment: [String: String] = [:]
+        startupEnvironment: [String: String] = [:],
+        historyFileId: UUID? = nil
     ) -> TerminalPanel? {
         let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
         let previousFocusedPanelId = focusedPanelId
@@ -10582,7 +10585,8 @@ final class Workspace: Identifiable, ObservableObject {
             initialCommand: startupCommand,
             tmuxStartCommand: tmuxStartCommand,
             initialInput: initialInput,
-            additionalEnvironment: startupEnvironment
+            additionalEnvironment: startupEnvironment,
+            historyFileId: historyFileId
         )
         configureTerminalPanel(newPanel)
         panels[newPanel.id] = newPanel
