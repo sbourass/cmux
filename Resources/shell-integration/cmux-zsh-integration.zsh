@@ -1948,3 +1948,30 @@ add-zsh-hook precmd _cmux_precmd
 add-zsh-hook precmd _cmux_fix_path
 add-zsh-hook chpwd _cmux_chpwd
 add-zsh-hook zshexit _cmux_zshexit
+
+# Per-pane shell history. cmux assigns each terminal pane its own history file
+# at ${CMUX_PANEL_HISTFILE}. Switching to it must happen AFTER the user's
+# .zshrc fully runs (so HISTSIZE/SAVEHIST are settled), so we register a
+# one-shot precmd hook that fires before the first prompt and removes itself.
+_cmux_history_init() {
+    if [[ -n "${CMUX_PANEL_HISTFILE:-}" ]]; then
+        local _cmux_saved_histsize=${HISTSIZE:-10000}
+        # Point HISTFILE at the per-pane file. SHARE_HISTORY / INC_APPEND_HISTORY
+        # read HISTFILE directly and would otherwise bypass any history scoping.
+        builtin export HISTFILE="$CMUX_PANEL_HISTFILE"
+        # Drop the in-memory history that zsh loaded from the old HISTFILE
+        # (typically ~/.zsh_history) at startup. The canonical zsh way to
+        # clear in-memory history without restarting is HISTSIZE=0 then back.
+        HISTSIZE=0
+        HISTSIZE=$_cmux_saved_histsize
+        # Load this pane's own history from disk (empty on first launch,
+        # populated on subsequent restores).
+        fc -R "$HISTFILE" 2>/dev/null
+        # Prevent inner shells (e.g. running `bash` or another `zsh` inside
+        # this pane) from inheriting the var and interleaving their history
+        # into this pane's file.
+        builtin unset CMUX_PANEL_HISTFILE
+    fi
+    add-zsh-hook -d precmd _cmux_history_init
+}
+add-zsh-hook precmd _cmux_history_init
