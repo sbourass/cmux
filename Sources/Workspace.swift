@@ -538,7 +538,8 @@ extension Workspace {
                 resumeBinding: resumeBinding,
                 textBoxDraft: terminalPanel.sessionTextBoxDraftSnapshot(),
                 remotePTYSessionID: remotePTYSessionIDForSnapshot(panelId: panelId),
-                wasAgentRunning: agentWasRunning
+                wasAgentRunning: agentWasRunning,
+                historyFileId: terminalPanel.surface.historyFileId
             )
             browserSnapshot = nil
             markdownSnapshot = nil
@@ -1015,7 +1016,8 @@ extension Workspace {
                 tmuxStartCommand: restoredTmuxStartCommand,
                 initialInput: restoredRemotePTYAttachCommand == nil ? restoredStartupInput : nil,
                 startupEnvironment: replayEnvironment,
-                remotePTYSessionID: restoredRemotePTYSessionID
+                remotePTYSessionID: restoredRemotePTYSessionID,
+                historyFileId: snapshot.terminal?.historyFileId
             ) else {
                 return nil
             }
@@ -12512,7 +12514,8 @@ final class Workspace: Identifiable, ObservableObject {
         tmuxStartCommand: String? = nil,
         initialInput: String? = nil,
         startupEnvironment: [String: String] = [:],
-        remotePTYSessionID: String? = nil
+        remotePTYSessionID: String? = nil,
+        historyFileId: UUID? = nil
     ) -> TerminalPanel? {
         let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
         let previousFocusedPanelId = focusedPanelId
@@ -12542,7 +12545,8 @@ final class Workspace: Identifiable, ObservableObject {
             initialCommand: startupCommand,
             tmuxStartCommand: tmuxStartCommand,
             initialInput: initialInput,
-            additionalEnvironment: startupEnvironment
+            additionalEnvironment: startupEnvironment,
+            historyFileId: historyFileId
         )
         configureTerminalPanel(newPanel)
         panels[newPanel.id] = newPanel

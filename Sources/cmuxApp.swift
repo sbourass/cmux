@@ -5267,6 +5267,8 @@ struct SettingsView: View {
     private var fileDropDefaultBehavior = FileDropBehaviorSettings.defaultBehavior.rawValue
     @AppStorage(AgentSessionAutoResumeSettings.autoResumeAgentSessionsKey)
     private var autoResumeAgentSessions = AgentSessionAutoResumeSettings.defaultAutoResumeAgentSessions
+    @AppStorage(PerPaneShellHistorySettings.enabledKey)
+    private var perPaneShellHistoryEnabled = PerPaneShellHistorySettings.defaultEnabled
     @AppStorage(WorkspaceAutoReorderSettings.key) private var workspaceAutoReorder = WorkspaceAutoReorderSettings.defaultValue
     @AppStorage(IMessageModeSettings.key) private var iMessageMode = IMessageModeSettings.defaultValue
     @AppStorage(SidebarWorkspaceDetailSettings.hideAllDetailsKey)
@@ -5518,6 +5520,17 @@ struct SettingsView: View {
                 guard autoResumeAgentSessions != newValue else { return }
                 autoResumeAgentSessions = newValue
                 AgentSessionAutoResumeSettings.notifyDidChange()
+            }
+        )
+    }
+
+    private var perPaneShellHistoryEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { perPaneShellHistoryEnabled },
+            set: { newValue in
+                guard perPaneShellHistoryEnabled != newValue else { return }
+                perPaneShellHistoryEnabled = newValue
+                PerPaneShellHistorySettings.notifyDidChange()
             }
         )
     }
@@ -6739,6 +6752,24 @@ struct SettingsView: View {
                                 .accessibilityIdentifier("SettingsTerminalAgentAutoResumeToggle")
                                 .accessibilityLabel(
                                     String(localized: "settings.terminal.agentAutoResume", defaultValue: "Resume Agent Sessions on Reopen")
+                                )
+                        }
+
+                        SettingsCardDivider()
+
+                        SettingsCardRow(
+                            configurationReview: .json("terminal.perPaneShellHistory"),
+                            String(localized: "settings.terminal.perPaneShellHistory", defaultValue: "Per-Pane Shell History"),
+                            subtitle: perPaneShellHistoryEnabled
+                                ? String(localized: "settings.terminal.perPaneShellHistory.subtitleOn", defaultValue: "Each terminal pane gets its own command history (HISTFILE) that survives quitting and reopening. New panes start empty.")
+                                : String(localized: "settings.terminal.perPaneShellHistory.subtitleOff", defaultValue: "All panes share your shell's default history file (typically ~/.zsh_history). Takes effect for new panes.")
+                        ) {
+                            Toggle("", isOn: perPaneShellHistoryEnabledBinding)
+                                .labelsHidden()
+                                .controlSize(.small)
+                                .accessibilityIdentifier("SettingsTerminalPerPaneShellHistoryToggle")
+                                .accessibilityLabel(
+                                    String(localized: "settings.terminal.perPaneShellHistory", defaultValue: "Per-Pane Shell History")
                                 )
                         }
                     }
@@ -7972,6 +8003,11 @@ struct SettingsView: View {
         autoResumeAgentSessions = AgentSessionAutoResumeSettings.defaultAutoResumeAgentSessions
         if previousAutoResumeAgentSessions != autoResumeAgentSessions {
             AgentSessionAutoResumeSettings.notifyDidChange()
+        }
+        let previousPerPaneShellHistoryEnabled = perPaneShellHistoryEnabled
+        perPaneShellHistoryEnabled = PerPaneShellHistorySettings.defaultEnabled
+        if previousPerPaneShellHistoryEnabled != perPaneShellHistoryEnabled {
+            PerPaneShellHistorySettings.notifyDidChange()
         }
         workspaceAutoReorder = WorkspaceAutoReorderSettings.defaultValue
         iMessageMode = IMessageModeSettings.defaultValue
