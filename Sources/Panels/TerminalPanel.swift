@@ -180,7 +180,8 @@ final class TerminalPanel: Panel, ObservableObject {
         initialEnvironmentOverrides: [String: String] = [:],
         additionalEnvironment: [String: String] = [:],
         focusPlacement: TerminalSurfaceFocusPlacement = .workspace,
-        runtimeSpawnPolicy: TerminalSurfaceRuntimeSpawnPolicy = .immediate
+        runtimeSpawnPolicy: TerminalSurfaceRuntimeSpawnPolicy = .immediate,
+        historyFileId: UUID? = nil
     ) {
         let surface = TerminalSurface(
             id: id,
@@ -195,7 +196,8 @@ final class TerminalPanel: Panel, ObservableObject {
             initialEnvironmentOverrides: initialEnvironmentOverrides,
             additionalEnvironment: additionalEnvironment,
             focusPlacement: focusPlacement,
-            runtimeSpawnPolicy: runtimeSpawnPolicy
+            runtimeSpawnPolicy: runtimeSpawnPolicy,
+            historyFileId: historyFileId
         )
         self.init(workspaceId: workspaceId, surface: surface)
     }
