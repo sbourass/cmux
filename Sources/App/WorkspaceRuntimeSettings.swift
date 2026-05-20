@@ -478,6 +478,49 @@ enum AgentHibernationTrackingGate {
     }
 }
 
+enum PerPaneShellHistorySettings {
+    static let enabledKey = "terminal.perPaneShellHistory"
+    static let defaultEnabled = true
+    static let didChangeNotification = Notification.Name("cmux.perPaneShellHistorySettingsDidChange")
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: enabledKey) != nil else {
+            return defaultEnabled
+        }
+        return defaults.bool(forKey: enabledKey)
+    }
+
+    static func setEnabled(
+        _ enabled: Bool,
+        defaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default
+    ) {
+        let wasEnabled = isEnabled(defaults: defaults)
+        defaults.set(enabled, forKey: enabledKey)
+        if wasEnabled != enabled {
+            notifyDidChange(notificationCenter: notificationCenter)
+        }
+    }
+
+    @discardableResult
+    static func reset(
+        defaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default
+    ) -> Bool {
+        let wasEnabled = isEnabled(defaults: defaults)
+        defaults.removeObject(forKey: enabledKey)
+        let didChange = wasEnabled != isEnabled(defaults: defaults)
+        if didChange {
+            notifyDidChange(notificationCenter: notificationCenter)
+        }
+        return didChange
+    }
+
+    static func notifyDidChange(notificationCenter: NotificationCenter = .default) {
+        notificationCenter.post(name: didChangeNotification, object: nil)
+    }
+}
+
 enum RightSidebarBetaFeatureSettings {
     static let feedEnabledKey = "rightSidebar.beta.feed.enabled"
     static let dockEnabledKey = "rightSidebar.beta.dock.enabled"
