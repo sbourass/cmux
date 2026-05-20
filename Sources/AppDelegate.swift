@@ -3170,9 +3170,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         didPrepareStartupSessionSnapshot = true
         Self.removeLegacyPersistedWindowGeometry()
         syncManualRestoreSnapshotCachePruningCrashDiagnostics()
+        // Always load the snapshots for orphan-sweep reference purposes — even
+        // when restore is disabled. Otherwise a user who toggles restore off,
+        // launches the app, and toggles restore back on would lose every
+        // per-pane history file in between (sweep with empty reference set
+        // would delete them all). Loading is a pure disk read with no side
+        // effects.
+        let liveSnapshot = sessionSnapshotStore.load(fileURL: nil)
+        let backupSnapshot = sessionSnapshotStore.loadReopenSessionSnapshot(fileURL: nil)
+        // Adopt upstream's crash-diagnostic-pruning startup load, but assign it
+        // with an `if` rather than an early `guard … else return` so the orphan
+        // sweep below still runs when restore is disabled.
         let sanitizedStartupSnapshot = loadStartupSessionSnapshotPruningCrashDiagnostics()
-        guard SessionRestorePolicy.shouldAttemptRestore() else { return }
-        startupSessionSnapshot = sanitizedStartupSnapshot
+        if SessionRestorePolicy.shouldAttemptRestore() {
+            startupSessionSnapshot = sanitizedStartupSnapshot
+        }
+        // Reap per-pane history files that no snapshot still references.
+        // Catches files left over from crashes, force-quits, or workspace
+        // deletions that bypassed the normal panel-close path. Only sweep
+        // when we have at least one snapshot to differentiate orphans from
+        // valid files — if both loads fail (first launch, corrupt files),
+        // skip rather than mass-delete.
+        if liveSnapshot != nil || backupSnapshot != nil {
+            let referenced = SessionPanelHistoryStore
+                .referencedHistoryFileIds(in: liveSnapshot)
+                .union(SessionPanelHistoryStore.referencedHistoryFileIds(in: backupSnapshot))
+            SessionPanelHistoryStore.sweepOrphans(referenced: referenced)
+        }
     }
 
     private func loadStartupSessionSnapshotPruningCrashDiagnostics() -> AppSessionSnapshot? {

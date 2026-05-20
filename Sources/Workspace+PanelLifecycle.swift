@@ -359,6 +359,18 @@ extension Workspace {
     /// Discard every Workspace-owned contribution for a surface whose tab,
     /// pane, or workspace has already been accepted for closure.
     @discardableResult
+    /// Tear down a panel's in-memory lifecycle state.
+    ///
+    /// `closePanel` is load-bearing for resource cleanup:
+    /// - `true`  — the panel is being permanently closed. The terminal's
+    ///   per-pane shell history file is deleted from disk. Use this for
+    ///   user-initiated tab/workspace close.
+    /// - `false` — the panel is being transferred (drag-and-drop tab reorder,
+    ///   detach, cross-window move). The history file MUST survive so the
+    ///   panel can resume reading/writing it at its new home.
+    ///
+    /// Any new caller that adds a detach/move path must pass `false` here, or
+    /// the user will silently lose their shell history.
     func discardClosedPanelLifecycleState(
         panelId: UUID,
         tabId: TabID? = nil,
@@ -386,6 +398,12 @@ extension Workspace {
             TerminalController.shared.cleanupSurfaceState(surfaceIds: [panelId, tabId?.uuid].compactMap { $0 })
         }
         if closePanel {
+            // Pane is being closed (not detached/transferred to another workspace).
+            // Remove its per-pane history file from disk — once closed, it won't
+            // be restored, so the file is orphaned.
+            if let terminalPanel = panel as? TerminalPanel {
+                SessionPanelHistoryStore.deleteHistoryFile(for: terminalPanel.surface.historyFileId)
+            }
             panel?.close()
         }
 

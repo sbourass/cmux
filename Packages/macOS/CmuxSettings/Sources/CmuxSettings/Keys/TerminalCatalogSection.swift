@@ -27,6 +27,12 @@ public struct TerminalCatalogSection: SettingCatalogSection {
         userDefaultsKey: "terminal.autoResumeAgentSessions"
     )
 
+    public let perPaneShellHistory = DefaultsKey<Bool>(
+        id: "terminal.perPaneShellHistory",
+        defaultValue: true,
+        userDefaultsKey: "terminal.perPaneShellHistory"
+    )
+
     public let agentHibernationEnabled = DefaultsKey<Bool>(
         id: "terminal.agentHibernation.enabled",
         defaultValue: false,

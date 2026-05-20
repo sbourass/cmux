@@ -180,8 +180,27 @@ extension TerminalSurface {
         manualIO: Bool = false,
         manualInputHandler: (@Sendable (Data) -> Void)? = nil,
         runtimeSpawnPolicy: TerminalSurfaceRuntimeSpawnPolicy = .immediate,
-        preparePaneHost: @Sendable @MainActor (any TerminalSurfacePaneHosting) -> Void = { _ in }
+        preparePaneHost: @Sendable @MainActor (any TerminalSurfacePaneHosting) -> Void = { _ in },
+        historyFileId: UUID? = nil
     ) {
+        // Per-pane shell history: resolve a stable id for this surface and, when
+        // the feature is enabled, point the shell at its own history file via
+        // CMUX_PANEL_HISTFILE. The shell integration scripts read this env var
+        // and switch HISTFILE after the user's rc files run, so each pane's
+        // command history is isolated and survives session restore. The id lives
+        // on the surface (it is persisted in the session snapshot); the env var
+        // is computed here in the app module because SessionPanelHistoryStore /
+        // PerPaneShellHistorySettings are app-layer types the CmuxTerminal
+        // package cannot reach. It flows to the spawn env through
+        // additionalEnvironment.
+        let resolvedHistoryFileId = historyFileId ?? UUID()
+        var mergedAdditionalEnvironment = additionalEnvironment
+        if PerPaneShellHistorySettings.isEnabled() {
+            let historyEnv = SessionPanelHistoryStore.historyEnvironment(for: resolvedHistoryFileId)
+            if let historyPath = historyEnv[SessionPanelHistoryStore.environmentKey] {
+                mergedAdditionalEnvironment[SessionPanelHistoryStore.environmentKey] = historyPath
+            }
+        }
         self.init(
             id: id,
             tabId: tabId,
@@ -193,12 +212,13 @@ extension TerminalSurface {
             tmuxStartCommand: tmuxStartCommand,
             initialInput: initialInput,
             initialEnvironmentOverrides: initialEnvironmentOverrides,
-            additionalEnvironment: additionalEnvironment,
+            additionalEnvironment: mergedAdditionalEnvironment,
             focusPlacement: focusPlacement,
             manualIO: manualIO,
             manualInputHandler: manualInputHandler,
             runtimeSpawnPolicy: runtimeSpawnPolicy,
             preparePaneHost: preparePaneHost,
+            historyFileId: resolvedHistoryFileId,
             dependencies: GhosttyApp.terminalSurfaceRuntimeDependencies
         )
     }
