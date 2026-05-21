@@ -1,0 +1,172 @@
+name: Update Homebrew Tap
+
+on:
+  # Fires after Fork Release finishes. workflow_run is preferred over
+  # release:published because the latter fires before assets finish uploading,
+  # causing SHA256 mismatches.
+  workflow_run:
+    workflows: ["Fork Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g., 0.64.7-sb.1 or v0.64.7-sb.1)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  update-tap:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Determine version
+        id: version
+        env:
+          MANUAL_VERSION: ${{ github.event.inputs.version }}
+          # head_branch on a tag-triggered workflow_run is the tag name (e.g., v0.64.7-sb.1).
+          WORKFLOW_REF: ${{ github.event.workflow_run.head_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ -n "$MANUAL_VERSION" ]; then
+            VERSION="$MANUAL_VERSION"
+          else
+            VERSION="$WORKFLOW_REF"
+          fi
+          VERSION="${VERSION#v}"
+          if [ -z "$VERSION" ]; then
+            echo "Could not determine version" >&2
+            exit 1
+          fi
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*-sb.[0-9]*) ;;
+            *)
+              if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+                echo "Invalid version: '$VERSION' (expected X.Y.Z-sb.N)" >&2
+                exit 1
+              fi
+              echo "Skipping tap update for non-release ref: '$VERSION'"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Updating homebrew cask to version $VERSION"
+
+      - name: Download DMG and compute SHA256
+        id: sha
+        if: steps.version.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          URL="https://github.com/sbourass/cmux/releases/download/v${VERSION}/cmux-macos.dmg"
+          MAX_RETRIES=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            HTTP_CODE=$(curl -sL -w '%{http_code}' "$URL" -o cmux.dmg)
+            FILE_SIZE=$(stat --printf="%s" cmux.dmg 2>/dev/null || stat -f%z cmux.dmg)
+            if [ "$HTTP_CODE" = "200" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
+              echo "Download OK: HTTP $HTTP_CODE, size $FILE_SIZE bytes"
+              break
+            fi
+            echo "Attempt $i/$MAX_RETRIES: HTTP $HTTP_CODE, size ${FILE_SIZE:-0} bytes"
+            if [ "$i" -eq "$MAX_RETRIES" ]; then
+              echo "Failed to download DMG after $MAX_RETRIES attempts" >&2
+              exit 1
+            fi
+            sleep 30
+          done
+          SHA256=$(shasum -a 256 cmux.dmg | cut -d' ' -f1)
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "DMG SHA256: $SHA256"
+
+      - name: Checkout sbourass/homebrew-cmux
+        if: steps.version.outputs.skip != 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: sbourass/homebrew-cmux
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Update cask formula
+        if: steps.version.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.sha.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          cat > tap/Casks/cmux.rb <<'CASKEOF'
+          cask "cmux" do
+            version "__VERSION__"
+            sha256 "__SHA256__"
+
+            url "https://github.com/sbourass/cmux/releases/download/v#{version}/cmux-macos.dmg"
+            name "cmux (sbourass fork)"
+            desc "Fork of manaflow-ai/cmux with per-pane shell history isolation"
+            homepage "https://github.com/sbourass/cmux"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            depends_on macos: ">= :sonoma"
+
+            app "cmux.app"
+            binary "#{appdir}/cmux.app/Contents/Resources/bin/cmux"
+
+            caveats <<~EOS
+              This is an ad-hoc-signed build, not Apple-notarized. On first launch macOS
+              will refuse to open it. Either right-click cmux.app -> Open and confirm, or
+              clear the quarantine bit:
+
+                xattr -dr com.apple.quarantine /Applications/cmux.app
+
+              Conflicts with the upstream `manaflow-ai/cmux` cask (same cask token);
+              install only one at a time.
+            EOS
+
+            zap trash: [
+              "~/Library/Application Support/cmux",
+              "~/Library/Caches/cmux",
+              "~/Library/Preferences/ai.manaflow.cmuxterm.plist",
+            ]
+          end
+          CASKEOF
+          sed -i 's/^          //' tap/Casks/cmux.rb
+          sed -i "s|__VERSION__|${VERSION}|" tap/Casks/cmux.rb
+          sed -i "s|__SHA256__|${SHA256}|" tap/Casks/cmux.rb
+
+      - name: Verify cask SHA matches DMG
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          CASK_SHA=$(grep 'sha256' tap/Casks/cmux.rb | sed 's/.*"\(.*\)".*/\1/')
+          ACTUAL_SHA=$(shasum -a 256 cmux.dmg | cut -d' ' -f1)
+          if [ "$CASK_SHA" != "$ACTUAL_SHA" ]; then
+            echo "SHA mismatch! Cask: $CASK_SHA, Actual: $ACTUAL_SHA" >&2
+            exit 1
+          fi
+          echo "SHA verification passed: $CASK_SHA"
+
+      - name: Commit and push
+        if: steps.version.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/cmux.rb
+          if git diff --staged --quiet; then
+            echo "No changes - cask already up to date"
+          else
+            git commit -m "Update cmux to ${VERSION}"
+            git push
+          fi
