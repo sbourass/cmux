@@ -42,6 +42,35 @@ the release-pretag guard passes.
 
 ---
 
+## Preflight (run after any long break)
+
+These were set up once and stay in place — but PATs expire and workflows can
+get re-enabled by upstream syncs. Verify before shipping if it's been a while:
+
+```bash
+# Token still valid? (look for HOMEBREW_TAP_TOKEN; check Updated date)
+gh secret list --repo sbourass/cmux
+
+# Fork-specific workflows still active? (Fork Release + Update Homebrew Tap)
+gh workflow list --repo sbourass/cmux
+
+# Conflicting upstream workflows still disabled?
+gh workflow list --repo sbourass/cmux --all | grep -E 'Release macOS app|Nightly|Update Homebrew Cask'
+# Each should show "disabled_manually"
+
+# Default branch still sb-main? (workflow_run depends on this)
+gh repo view sbourass/cmux --json defaultBranchRef --jq .defaultBranchRef.name
+# Expect: sb-main
+```
+
+If `HOMEBREW_TAP_TOKEN` is missing or expired, re-create the fine-grained PAT
+(`sbourass/homebrew-cmux` Contents: read+write) and `gh secret set
+HOMEBREW_TAP_TOKEN --repo sbourass/cmux`. Symptom of expiration is the tap
+updater silently failing with HTTP 401 from the `peter-evans/repository-dispatch`
+or `git push` step.
+
+---
+
 ## Shipping a release
 
 ```bash
