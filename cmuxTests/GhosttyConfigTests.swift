@@ -1277,7 +1277,7 @@ final class GhosttyConfigTests: XCTestCase {
         XCTAssertFalse(AgentSubagentNotificationSettings.suppressNotifications(defaults: defaults))
     }
 
-    func testTelemetryDefaultsToEnabledWhenUnset() {
+    func testTelemetryDefaultsToDisabledWhenUnset() {
         let suiteName = "cmux.tests.telemetry.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             XCTFail("Failed to create isolated user defaults suite")
@@ -1288,7 +1288,7 @@ final class GhosttyConfigTests: XCTestCase {
         }
 
         defaults.removeObject(forKey: TelemetrySettings.sendAnonymousTelemetryKey)
-        XCTAssertTrue(TelemetrySettings.isEnabled(defaults: defaults))
+        XCTAssertFalse(TelemetrySettings.isEnabled(defaults: defaults))
     }
 
     func testTelemetryRespectsStoredPreference() {
