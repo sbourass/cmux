@@ -5160,7 +5160,7 @@ enum WelcomeSettings {
 
 enum TelemetrySettings {
     static let sendAnonymousTelemetryKey = "sendAnonymousTelemetry"
-    static let defaultSendAnonymousTelemetry = true
+    static let defaultSendAnonymousTelemetry = false
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
         if defaults.object(forKey: sendAnonymousTelemetryKey) == nil {
