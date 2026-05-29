@@ -121,7 +121,7 @@ public struct AppCatalogSection: SettingCatalogSection {
 
     public let sendAnonymousTelemetry = DefaultsKey<Bool>(
         id: "app.sendAnonymousTelemetry",
-        defaultValue: true,
+        defaultValue: false,
         userDefaultsKey: "sendAnonymousTelemetry"
     )
 
