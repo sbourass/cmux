@@ -79,23 +79,41 @@ cd /Users/user/src/cmux/cmux-per-pane-shell-history
 # 1. Verify build (see build-env.md for env requirements)
 PATH="/opt/homebrew/opt/zig@0.15/bin:$PATH" ./scripts/reload.sh --tag sb-sync
 
-# 2. Bump version
+# 2. Update docs/patches.md (see "Maintaining patches.md" below) — required step
+#    reconcile the patch list, bump the "Last synced upstream base", re-run each
+#    patch's Verify note against the current base.
+
+# 3. Bump version
 ./scripts/bump-version.sh patch            # or explicit X.Y.Z-sb.N after a sync
 
-# 3. Pretag guard (checks build number monotonic vs published)
+# 4. Pretag guard (checks build number monotonic vs published)
 ./scripts/release-pretag-guard.sh
 
-# 4. Commit, tag, push
+# 5. Commit, tag, push  (patches.md + version bump in the same release commit)
 git commit -am "Bump to <new-version>"
 git tag v<new-version>
 git push origin sb-main v<new-version>
 
-# 5. Watch
+# 6. Watch
 gh run watch --repo sbourass/cmux
 ```
 
 Once `Fork Release` completes, `Update Homebrew Tap` chains off it via
 `workflow_run` and rewrites `Casks/cmux.rb` in the tap repo.
+
+### Maintaining patches.md
+
+[`docs/patches.md`](./patches.md) is the curated index of the behavioral patches the
+fork carries. **Updating it is a required release step**, and Claude Code does it
+automatically when asked to cut a fork release:
+
+1. Reconcile the patch list against `git log --oneline --no-merges v<base>..sb-main`:
+   add any new patch, remove any dropped one, fix file paths that moved.
+2. Update the **"Last synced upstream base"** line to the version being shipped.
+3. Re-run each behavioral patch's **Verify** steps against the current build and
+   confirm they still pass — this is what catches a patch that rebased cleanly but was
+   bypassed by an upstream refactor (the telemetry-default second-source-of-truth case).
+   If a Verify step fails, fix the patch (and its **Rot watch** note) before shipping.
 
 ---
 
@@ -113,7 +131,12 @@ PATH="/opt/homebrew/opt/zig@0.15/bin:$PATH" ./scripts/reload.sh --tag sb-sync
 git push --force-with-lease origin sb-main
 ```
 
-Then ship a new release with `bump-version.sh <upstream>-sb.1`.
+After resolving conflicts, **re-verify every behavioral patch against the new base
+using the Verify steps in [`docs/patches.md`](./patches.md)** before shipping. A clean
+rebase does not guarantee a patch still works — upstream refactors can bypass a patch
+that merged without conflict (e.g. the v0.64.11 settings extraction + telemetry
+second-source-of-truth). Then ship a new release with `bump-version.sh <upstream>-sb.1`
+(the "Update docs/patches.md" step in "Shipping a release" covers reconciling the index).
 
 ### Recurring conflict files
 
@@ -205,4 +228,5 @@ brew update && brew upgrade --cask sbourass/cmux/cmux      # end-to-end
 | `cmux.xcodeproj/project.pbxproj` | Holds `MARKETING_VERSION` + `CURRENT_PROJECT_VERSION`. |
 | `tests/test_ci_sparkle_build_monotonic.sh` | Sparkle build-monotonic guard. Hardcoded to upstream's appcast — ignore on the fork. |
 | `docs/build-env.md` | Local build-environment requirements (zig, Metal Toolchain, submodules). |
+| `docs/patches.md` | Curated index of the fork's behavioral patches (what + why + how to verify). Updated every release. |
 | `docs/per-pane-shell-history.md` | The fork's per-pane shell-history feature spec. |
