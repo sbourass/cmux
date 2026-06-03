@@ -17,7 +17,8 @@ tag push → Fork Release workflow → GitHub Release (cmux-macos.dmg)
 ```
 
 Sparkle auto-update is stripped at build time — Homebrew is the only update
-channel.
+channel. The DMG is attested with GitHub build provenance, and the release body
+is generated per-tag to list the fork's commits on top of the upstream base.
 
 ---
 
@@ -56,6 +57,14 @@ gh workflow list --repo sbourass/cmux
 
 # Conflicting upstream workflows still disabled?
 gh workflow list --repo sbourass/cmux --all | grep -E 'Release macOS app|Nightly|Update Homebrew Cask'
+# Each should show "disabled_manually"
+
+# Upstream CI workflows that require paid macOS runners still disabled?
+# The fork has no Blacksmith/Warp runner, so their macOS jobs (runs-on:
+# vars.MACOS_RUNNER_15 || warp-macos-...) queue forever on every PR; the ubuntu
+# jobs run fine. Keep these disabled (the ubuntu-only workflow-guard-tests is the
+# meaningful PR signal).
+gh workflow list --repo sbourass/cmux --all | grep -E 'Activation performance|^CI[[:space:]]'
 # Each should show "disabled_manually"
 
 # Default branch still sb-main? (workflow_run depends on this)
@@ -182,6 +191,8 @@ gh workflow run "Update Homebrew Tap" \
 
 ```bash
 gh release view v<X.Y.Z-sb.N> --repo sbourass/cmux        # check DMG asset present
+gh release download v<X.Y.Z-sb.N> --repo sbourass/cmux --pattern cmux-macos.dmg  # fetch it locally
+gh attestation verify cmux-macos.dmg --repo sbourass/cmux  # verify build provenance (needs the local file)
 gh api repos/sbourass/homebrew-cmux/contents/Casks/cmux.rb --jq .content \
   | base64 -d | grep -E 'version|sha256'                   # check cask updated
 brew update && brew upgrade --cask sbourass/cmux/cmux      # end-to-end
