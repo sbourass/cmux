@@ -5,8 +5,10 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# Minimal at workflow scope; the build job elevates to the writes it actually
+# needs (release upload + attestation). Keeps workflow_dispatch dry-runs read-only.
 permissions:
-  contents: write
+  contents: read
 
 env:
   CREATE_DMG_VERSION: 8.0.0
@@ -15,11 +17,19 @@ jobs:
   build:
     runs-on: macos-latest
     timeout-minutes: 60
+    permissions:
+      contents: write       # Create GitHub Release + upload the DMG asset
+      id-token: write       # OIDC token for build-provenance attestation
+      attestations: write   # write the attestation to the repo's attestation store
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: recursive
+          fetch-depth: 0   # full history so the upstream base commit (an ancestor
+                           # of the rebased HEAD) is present for the release-notes diff
+          persist-credentials: false   # no later step needs authenticated git; keep
+                                       # the write-scoped token out of .git/config
 
       - name: Verify tag matches MARKETING_VERSION and uses fork suffix
         if: github.event_name == 'push'
@@ -48,9 +58,18 @@ jobs:
           if [ -d "/Applications/Xcode.app/Contents/Developer" ]; then
             XCODE_DIR="/Applications/Xcode.app/Contents/Developer"
           else
-            XCODE_APP="$(ls -d /Applications/Xcode*.app 2>/dev/null | head -n 1 || true)"
-            [ -n "$XCODE_APP" ] || { echo "No Xcode.app under /Applications" >&2; exit 1; }
-            XCODE_DIR="$XCODE_APP/Contents/Developer"
+            XCODE_APP="$(
+              find /Applications -maxdepth 1 -name 'Xcode*.app' -print 2>/dev/null \
+                | sort \
+                | tail -n 1 \
+                || true
+            )"
+            if [ -n "$XCODE_APP" ]; then
+              XCODE_DIR="$XCODE_APP/Contents/Developer"
+            else
+              echo "No Xcode.app found under /Applications" >&2
+              exit 1
+            fi
           fi
           echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
           export DEVELOPER_DIR="$XCODE_DIR"
@@ -124,6 +143,16 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :SUEnableAutomaticChecks false" "$APP_PLIST" 2>/dev/null \
             || /usr/libexec/PlistBuddy -c "Add :SUEnableAutomaticChecks bool false" "$APP_PLIST"
           /usr/libexec/PlistBuddy -c "Print :SUEnableAutomaticChecks" "$APP_PLIST"
+          # Assert the critical invariant actually held. The deletes above swallow
+          # errors (so an absent key isn't fatal), which means a future Info.plist
+          # refactor could make them silently no-op and still ship a fork that can
+          # auto-update to upstream. Fail the build if either key survived.
+          for k in SUFeedURL SUPublicEDKey; do
+            if /usr/libexec/PlistBuddy -c "Print :$k" "$APP_PLIST" >/dev/null 2>&1; then
+              echo "FATAL: $k still present after strip — would allow silent upstream replacement" >&2
+              exit 1
+            fi
+          done
 
       - name: Ad-hoc codesign
         run: |
@@ -142,29 +171,69 @@ jobs:
           mv ./cmux*.dmg cmux-macos.dmg
           ls -lh cmux-macos.dmg
 
+      - name: Attest build provenance
+        # Binds cmux-macos.dmg to this workflow run via GitHub OIDC. Users can then
+        # `gh attestation verify cmux-macos.dmg --repo sbourass/cmux` — an integrity
+        # anchor independent of the Homebrew tap (no Apple Developer account needed).
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: cmux-macos.dmg
+
+      - name: Build release notes
+        # Distinguish the fork's own commits from the folded-in upstream rebase.
+        # The fork repo does not carry upstream's base tags, so resolve the upstream
+        # base commit SHA directly from upstream; the rebased HEAD has it as an
+        # ancestor (Checkout uses fetch-depth: 0), making BASE_SHA..HEAD exactly the
+        # fork commits on top of that base.
+        if: github.event_name == 'push'
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          BASE="v$(echo "${REF_NAME#v}" | sed 's/-sb\..*//')"
+          BASE_SHA="$(git ls-remote https://github.com/manaflow-ai/cmux "refs/tags/${BASE}^{}" | cut -f1)"
+          if [ -z "$BASE_SHA" ]; then
+            # Lightweight (unannotated) tag has no peeled ^{} ref; fall back to the tag itself.
+            BASE_SHA="$(git ls-remote https://github.com/manaflow-ai/cmux "refs/tags/${BASE}" | cut -f1)"
+          fi
+          if [ -z "$BASE_SHA" ]; then
+            echo "FATAL: could not resolve upstream base commit for ${BASE} — refusing to emit empty notes" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$BASE_SHA" HEAD; then
+            echo "FATAL: upstream base ${BASE} (${BASE_SHA}) is not an ancestor of HEAD — was sb-main rebased onto it?" >&2
+            exit 1
+          fi
+          {
+            echo "Personal fork build of [manaflow-ai/cmux](https://github.com/manaflow-ai/cmux) — ad-hoc signed, **not** Apple-notarized."
+            echo
+            echo "**Upstream base:** \`${BASE}\` — [upstream changelog](https://github.com/manaflow-ai/cmux/releases/tag/${BASE})"
+            echo
+            echo "**Changes in this fork build on top of \`${BASE}\`** (curated index: \`docs/patches.md\`):"
+            echo
+            git log --reverse --pretty='- %s' --no-merges "${BASE_SHA}..HEAD"
+            echo
+            echo "Update via \`brew upgrade --cask sbourass/cmux/cmux\`."
+            echo
+            echo "Verify provenance: \`gh attestation verify cmux-macos.dmg --repo sbourass/cmux\`"
+            echo
+            echo "On first launch macOS will refuse to open the app. Right-click \`cmux.app\` → Open, or clear quarantine:"
+            echo
+            echo '```'
+            echo "xattr -dr com.apple.quarantine /Applications/cmux.app"
+            echo '```'
+          } > notes.md
+          echo "--- generated notes.md ---"
+          cat notes.md
+
       - name: Create GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           files: cmux-macos.dmg
           name: ${{ github.ref_name }} (fork build)
-          body: |
-            Personal fork build of [manaflow-ai/cmux](https://github.com/manaflow-ai/cmux)
-            carrying the `feat/per-pane-shell-history` patch.
-
-            Ad-hoc signed, **not** Apple-notarized. Sparkle auto-update is disabled —
-            use brew to upgrade:
-
-            ```
-            brew upgrade --cask sbourass/cmux/cmux
-            ```
-
-            On first launch macOS will refuse to open the app. Right-click `cmux.app` →
-            Open, or clear quarantine:
-
-            ```
-            xattr -dr com.apple.quarantine /Applications/cmux.app
-            ```
+          body_path: notes.md
           generate_release_notes: false
           fail_on_unmatched_files: true
 
