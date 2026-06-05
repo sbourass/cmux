@@ -12,7 +12,7 @@ The live, machine-readable list is always:
 git log --oneline --no-merges v<upstream-base>..sb-main
 ```
 
-**Last synced upstream base:** `v0.64.11` (shipped as `v0.64.11-sb.1`)
+**Last synced upstream base:** `v0.64.13` (shipped as `v0.64.13-sb.1`)
 
 > Maintenance: this file is updated as part of every fork release — see
 > [fork-release.md](./fork-release.md) → "Shipping a release", step "Update patches.md".
@@ -121,12 +121,21 @@ do not need per-sync behavior verification, but should still be checked to apply
 - `Add fork-release and build-env docs` — `docs/fork-release.md`, `docs/build-env.md`.
 - `Add preflight checklist to fork-release docs` — preflight section in
   `docs/fork-release.md`.
+- `Add docs/patches.md fork patch index` — this file, wired into the release
+  process as a required step.
+- `Harden fork release workflow` — build provenance attestation, generated
+  release notes, and disabling conflicting fork CI workflows in
+  `.github/workflows/fork-release.yml` + `update-homebrew-tap.yml`.
 
 ---
 
 ## Release bookkeeping (recreated each release, not a tracked patch)
 
 - `Bump to <version>` — version bump in `cmux.xcodeproj/project.pbxproj`
-  (`MARKETING_VERSION` + `CURRENT_PROJECT_VERSION`). The `0.64.10-sb.1`/`-sb.2` bump
-  commits from the previous base were intentionally dropped during the `v0.64.11` rebase
-  (superseded by the single `0.64.11-sb.1` bump). Always the tip of `sb-main`.
+  (`MARKETING_VERSION` + `CURRENT_PROJECT_VERSION`). The mid-stack `Bump to …`
+  commit is intentionally dropped during each upstream rebase (resolve the
+  `project.pbxproj` conflict to upstream's version/build so the commit goes
+  net-empty) and replaced by a single fresh `bump-version.sh <base>-sb.1` on the
+  new base. Precedent: the `0.64.10-sb.*` bumps were dropped during the `v0.64.11`
+  rebase, and the `0.64.11-sb.1` bump was dropped during the `v0.64.13` rebase.
+  Always the tip of `sb-main`.
