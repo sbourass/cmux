@@ -12,7 +12,7 @@ The live, machine-readable list is always:
 git log --oneline --no-merges v<upstream-base>..sb-main
 ```
 
-**Last synced upstream base:** `v0.64.11` (shipped as `v0.64.11-sb.1`)
+**Last synced upstream base:** `v0.64.15` (shipped as `v0.64.15-sb.1`)
 
 > Maintenance: this file is updated as part of every fork release — see
 > [fork-release.md](./fork-release.md) → "Shipping a release", step "Update patches.md".
@@ -121,6 +121,13 @@ do not need per-sync behavior verification, but should still be checked to apply
 - `Add fork-release and build-env docs` — `docs/fork-release.md`, `docs/build-env.md`.
 - `Add preflight checklist to fork-release docs` — preflight section in
   `docs/fork-release.md`.
+- `Add docs/patches.md fork patch index + wire into release process` — this index
+  (`docs/patches.md`) and its release-step wiring in `docs/fork-release.md`.
+- `Harden fork release workflow` — robustness fixes to
+  `.github/workflows/fork-release.yml`.
+- `docs(fork-release): note attestation, generated release notes, and disabled fork CI workflows`
+  — DMG build provenance attestation, per-tag generated release notes, and the
+  rationale for disabling conflicting upstream workflows (`docs/fork-release.md`).
 
 ---
 
