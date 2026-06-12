@@ -121,6 +121,17 @@ do not need per-sync behavior verification, but should still be checked to apply
 - `Add fork-release and build-env docs` — `docs/fork-release.md`, `docs/build-env.md`.
 - `Add preflight checklist to fork-release docs` — preflight section in
   `docs/fork-release.md`.
+- `Add docs/patches.md fork patch index + wire into release process` — this index
+  (`docs/patches.md`) and its release-step wiring in `docs/fork-release.md`.
+- `Harden fork release workflow` — robustness fixes to
+  `.github/workflows/fork-release.yml`.
+- `docs(fork-release): note attestation, generated release notes, and disabled fork CI workflows`
+  — DMG build provenance attestation, per-tag generated release notes, and the
+  rationale for disabling conflicting upstream workflows (`docs/fork-release.md`).
+- `Add cmux-fork-release skill` — the agent skill that orchestrates this
+  sync-and-release pipeline end to end (`skills/cmux-fork-release/SKILL.md`, symlinked
+  from `.claude/skills/`). Wraps `docs/fork-release.md` + this index and adds the
+  Claude-Code operating lessons (sandbox/git, `gh` 502 false-positives, force-with-lease).
 
 ---
 
