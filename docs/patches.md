@@ -12,7 +12,7 @@ The live, machine-readable list is always:
 git log --oneline --no-merges v<upstream-base>..sb-main
 ```
 
-**Last synced upstream base:** `v0.64.11` (shipped as `v0.64.11-sb.1`)
+**Last synced upstream base:** `v0.64.16` (shipped as `v0.64.16-sb.1`)
 
 > Maintenance: this file is updated as part of every fork release — see
 > [fork-release.md](./fork-release.md) → "Shipping a release", step "Update patches.md".
@@ -50,9 +50,15 @@ These change cmux's runtime behavior versus upstream.
 - **Key code (source of truth):**
   - `Sources/App/WorkspaceRuntimeSettings.swift` — `PerPaneShellHistorySettings`
     enum (UserDefaults key `terminal.perPaneShellHistory`, default `true`).
-  - `Sources/GhosttyTerminalView.swift` — sets `CMUX_PANEL_HISTFILE` env per surface
-    (in/after `applyManagedCmuxContextEnvironment`), gated on
-    `PerPaneShellHistorySettings.isEnabled()`; `historyFileId` on `TerminalSurface`.
+  - `Packages/CmuxTerminal/.../Surface/TerminalSurface.swift` — `historyFileId: UUID`
+    stored property + init parameter on the (now package-extracted) `TerminalSurface`.
+  - `Sources/TerminalSurfaceRuntimeWiring.swift` — the app-module convenience
+    `TerminalSurface.init` resolves `historyFileId` and, gated on
+    `PerPaneShellHistorySettings.isEnabled()`, injects `CMUX_PANEL_HISTFILE` into the
+    spawn env via `additionalEnvironment`. (Upstream v0.64.16 moved `TerminalSurface`
+    into the `CmuxTerminal` package, which cannot reach app-layer
+    `SessionPanelHistoryStore`/`PerPaneShellHistorySettings`, so the env injection now
+    lives in this app-module seam instead of inside the surface's env builder.)
   - `Sources/SessionPersistence.swift` — `SessionPanelHistoryStore` (env key
     `CMUX_PANEL_HISTFILE`, `panel-history` dir, orphan sweep), `historyFileId` in the
     terminal snapshot.
@@ -80,29 +86,38 @@ These change cmux's runtime behavior versus upstream.
   + curated search entry + anchor test). If a future upstream moves/renames that, re-port
   the four settings pieces and keep `SettingsRowAnchorResolutionTests.rowConfigPaths` in
   sync (its contract test fails the build otherwise). The runtime mechanism
-  (`CMUX_PANEL_HISTFILE`, shell integration) is stable.
+  (`CMUX_PANEL_HISTFILE`, shell integration) is stable. Second fragile spot since
+  v0.64.16: `TerminalSurface` is package-extracted (`CmuxTerminal`), so the env
+  injection lives in `Sources/TerminalSurfaceRuntimeWiring.swift`'s convenience init,
+  not in the surface itself. If upstream reshapes that convenience init or the
+  `additionalEnvironment` plumbing, re-anchor the `CMUX_PANEL_HISTFILE` injection there
+  and keep `historyFileId` flowing into the package init.
 
 ### 2. Default anonymous telemetry to off
 - **Commit subject:** `Default anonymous telemetry to off`
 - **Purpose:** fresh installs are opt-in (telemetry off) rather than opt-out. Existing
   users keep their stored preference (the default is only consulted when the
   `sendAnonymousTelemetry` key is unset).
-- **Key code (source of truth — there are TWO defaults, both must be `false`):**
-  - `Sources/cmuxApp.swift` — `TelemetrySettings.defaultSendAnonymousTelemetry = false`
-    (drives the actual send gate `TelemetrySettings.enabledForCurrentLaunch`).
+- **Key code (source of truth — ONE default since v0.64.16):**
   - `Packages/CmuxSettings/.../Keys/AppCatalogSection.swift` — catalog key
-    `app.sendAnonymousTelemetry` `defaultValue: false` (drives the **Settings UI toggle**;
-    same UserDefaults key `sendAnonymousTelemetry`).
-  - `cmuxTests/GhosttyConfigTests.swift` — `testTelemetryDefaultsToDisabledWhenUnset`.
+    `app.sendAnonymousTelemetry` `defaultValue: false`. This is now the **single**
+    source of truth: it drives both the Settings UI toggle and the send gate.
+    `TelemetrySettings.enabledForCurrentLaunch` in `Sources/cmuxApp.swift` reads it
+    directly via `AppCatalogSection().sendAnonymousTelemetry.value(in: .standard)`, so
+    `Sources/cmuxApp.swift` no longer carries its own `defaultSendAnonymousTelemetry`
+    field (upstream removed it in v0.64.16) and the fork no longer patches that file.
+  - `cmuxTests/GhosttyConfigTests.swift` — `testTelemetryDefaultsToDisabledWhenUnset`
+    asserts `AppCatalogSection().sendAnonymousTelemetry.value(in:)` is `false` when unset.
 - **Verify:**
   1. With the key unset (`defaults read <bundle-id> sendAnonymousTelemetry` → "does not
      exist"), the Settings telemetry toggle shows **OFF**.
   2. Actual sending is gated off: `TelemetrySettings.enabledForCurrentLaunch` is `false`
      when unset (used by `SentryHelper`, `PostHogAnalytics`, `AppDelegate`).
-- **Rot watch:** **two sources of truth** for one UserDefaults key — the
-  `TelemetrySettings` enum default *and* the `CmuxSettings` catalog `DefaultsKey` default.
-  They were split by upstream in v0.64.11. If a sync touches either, set **both** to
-  `false`. If upstream adds a third reader, default it off too.
+- **Rot watch:** upstream split this into two defaults in v0.64.11 (a `TelemetrySettings`
+  enum default *and* the catalog `DefaultsKey`) and then **re-merged** them into the
+  single catalog `DefaultsKey` in v0.64.16. Only the catalog `defaultValue: false`
+  matters now. If a future sync re-introduces a separate `TelemetrySettings` default or
+  any other reader, default it off too.
 
 ---
 
