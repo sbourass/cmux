@@ -16,7 +16,10 @@ env:
 jobs:
   build:
     runs-on: macos-latest
-    timeout-minutes: 60
+    # Universal (arm64 + x86_64) WMO Release build of the full app module; the
+    # step alone runs ~50-65 min and grows each upstream sync, so keep generous
+    # headroom over the prior 60m (which v0.64.17 exceeded and got cancelled).
+    timeout-minutes: 120
     permissions:
       contents: write       # Create GitHub Release + upload the DMG asset
       id-token: write       # OIDC token for build-provenance attestation
