@@ -20,6 +20,12 @@ git log --oneline --no-merges v<upstream-base>..sb-main
 > `git log v<base>..sb-main` and re-checks each patch's **Verify** note against the
 > new upstream base.
 
+> Commit naming: fork commits use scoped subjects — `fork(patch):` for behavioral
+> patches (the ones with a **Verify** step below), `fork(infra):` for fork tooling/docs.
+> See [fork-release.md](./fork-release.md) → "Commit naming convention". The reword is
+> applied during the upstream-sync rebase, and the `**Commit subject:**` keys below are
+> updated in lockstep at that point — so they always match live `git log`.
+
 ---
 
 ## Why "behavior + verify", not just a diff

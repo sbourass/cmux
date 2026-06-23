@@ -110,6 +110,24 @@ gh run watch --repo sbourass/cmux
 Once `Fork Release` completes, `Update Homebrew Tap` chains off it via
 `workflow_run` and rewrites `Casks/cmux.rb` in the tap repo.
 
+### Commit naming convention
+
+Fork commit subjects use a scoped conventional-commit tag, two scopes only:
+
+- **`fork(patch):`** — changes cmux's runtime behavior vs upstream (the commits with
+  a **Verify** step in [`patches.md`](./patches.md)).
+- **`fork(infra):`** — builds, ships, or documents the fork (CI workflows,
+  `bump-version.sh`, the Homebrew-tap updater, these docs, the `patches.md` index,
+  the `cmux-fork-release` skill). CI workflows are infra — no separate `workflow`
+  scope.
+
+Style `fork(<scope>): <lowercase imperative>`. The `Bump to <ver>-sb.N` tip is
+release bookkeeping, left unprefixed. Subjects appear verbatim to users in the
+generated GitHub Release body (`.github/workflows/fork-release.yml`). The reword is
+applied during the upstream-sync rebase (it rewrites every SHA anyway, so there's no
+extra force-push), and the `**Commit subject:**` keys in `patches.md` are updated in
+lockstep at that point.
+
 ### Maintaining patches.md
 
 [`docs/patches.md`](./patches.md) is the curated index of the behavioral patches the
