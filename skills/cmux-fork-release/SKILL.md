@@ -27,6 +27,25 @@ The fork keeps its canonical, maintained procedure in-repo. Read them before act
 - Version is `X.Y.Z-sb.N`: `X.Y.Z` = upstream base, `N` = fork iteration on that base. After a sync → `<upstream>-sb.1`; a fork-only patch on the same base → bump `N`.
 - The fork tracks upstream **release tags**, not `main`/nightly.
 
+## Fork commit naming convention
+
+Every fork commit subject is a scoped conventional-commit tag — two scopes only:
+
+- **`fork(patch):`** — changes cmux's runtime behavior versus upstream. These are
+  exactly the commits that have a **Verify** step in `docs/patches.md` (today:
+  per-pane shell history, telemetry-off).
+- **`fork(infra):`** — everything that builds, ships, or documents the fork (CI
+  workflows, `bump-version.sh`, the Homebrew-tap updater, the fork docs, the
+  `patches.md` index, this skill). CI workflows are infra — there is **no** separate
+  `workflow` scope.
+
+Style: `fork(<scope>): <lowercase imperative>`. The `Bump to <ver>-sb.N` tip is
+release bookkeeping (regenerated each release), not a tracked patch — leave it
+**unprefixed**. Subjects are surfaced verbatim to users in the generated GitHub
+Release body (`.github/workflows/fork-release.yml`), so keep them clean. The reword
+is applied during the Phase A rebase (below), and `docs/patches.md`'s
+`**Commit subject:**` keys are updated in lockstep in Phase B step 2.
+
 ---
 
 ## Phase A — Sync to the latest upstream release
@@ -55,6 +74,20 @@ git submodule update --init --recursive
 git submodule status --recursive      # no leading '+' when aligned
 ```
 
+**Reword fork commits** to the naming convention (above). The rebase already
+rewrites every SHA, so this is the free moment to normalize subjects — no extra
+force-push. Each replayed fork commit must carry its `fork(patch):` / `fork(infra):`
+subject; the `Bump to …` tip stays unprefixed. Mechanism:
+
+```bash
+git rebase -i "$LATEST"     # mark each fork commit 'reword', fix its subject
+```
+
+If interactive `-i` is unavailable (some agent sandboxes block the editor), run it
+in a normal shell or script the todo via `GIT_SEQUENCE_EDITOR`. Any already-correct
+`fork(...)` subject needs no change. After rewording, `git log --oneline
+"$LATEST"..sb-main` should read as a clean `fork(patch):` / `fork(infra):` list.
+
 **Build-verify** (proves the conflict resolution compiles against the new base):
 
 ```bash
@@ -80,6 +113,7 @@ gh repo view sbourass/cmux --json defaultBranchRef --jq .defaultBranchRef.name  
 
 - Set **"Last synced upstream base"** to `<LATEST>` (shipped as `<LATEST>-sb.1`).
 - Reconcile the patch list against `git log --oneline --no-merges <LATEST>..sb-main` — add new patches, drop removed ones, fix moved paths.
+- Update each `**Commit subject:**` key to the **reworded** subject (from the Phase A reword) — in lockstep, so the index keys keep matching live `git log`.
 - **Re-run each behavioral patch's Verify** against the new base. The two that exist today:
   - *Default anonymous telemetry off* — **two** sources of truth, both must be `false`: `TelemetrySettings.defaultSendAnonymousTelemetry` (`Sources/cmuxApp.swift`) **and** the `app.sendAnonymousTelemetry` catalog `defaultValue` (`Packages/CmuxSettings/.../Keys/AppCatalogSection.swift`). A prior sync broke exactly this when upstream split the default.
   - *Per-pane shell history* — catalog default `true`, the three `CmuxSettingsUI` pieces (row + curated search entry + anchor test), runtime plumbing in `Sources/`, and both shell-integration scripts. Gold-standard runtime check (below): `$HISTFILE` resolves under `panel-history/<uuid>.zsh_history`.
