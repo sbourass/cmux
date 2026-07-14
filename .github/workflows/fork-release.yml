@@ -14,8 +14,53 @@ env:
   CREATE_DMG_VERSION: 8.0.0
 
 jobs:
+  # Build the zig-based Ghostty CLI helper on macos-15. This must NOT run on the
+  # macos-26 image (macos-latest since 2026-06-15): zig 0.15.x cannot link
+  # against the macOS 26 SDK there and fails with undefined libSystem symbols
+  # (__availability_version_check, _abort, …). Building it against the macOS 15
+  # SDK produces a universal binary that the app build below just bundles.
+  # Mirrors upstream release.yml's build-ghostty-cli-helper job.
+  build-ghostty-cli-helper:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install zig
+        run: ./scripts/install-zig-ci.sh
+
+      - name: Cache Zig packages
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/zig
+          key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}
+          restore-keys: zig-packages-
+
+      - name: Build universal Ghostty CLI helper
+        run: |
+          set -euo pipefail
+          mkdir -p ghostty-cli-helper
+          ./scripts/build-ghostty-cli-helper.sh --universal --output ghostty-cli-helper/ghostty
+          lipo ghostty-cli-helper/ghostty -verify_arch arm64 x86_64
+
+      - name: Upload universal Ghostty CLI helper
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cmux-ghostty-cli-helper
+          path: ghostty-cli-helper/ghostty
+          if-no-files-found: error
+
   build:
-    runs-on: macos-latest
+    needs: build-ghostty-cli-helper
+    # macos-26 (Xcode 26.x) is required to compile upstream Swift that uses
+    # `isolated deinit`; its clang/ld link the app against the macOS 26 SDK
+    # fine. Only the zig CLI helper can't target macOS 26 — it comes prebuilt
+    # from the macos-15 job above and is installed with CMUX_SKIP_ZIG_BUILD=1.
+    runs-on: macos-26
     # Universal (arm64 + x86_64) WMO Release build of the full app module; the
     # step alone runs ~50-65 min and grows each upstream sync, so keep generous
     # headroom over the prior 60m (which v0.64.17 exceeded and got cancelled).
@@ -108,13 +153,30 @@ jobs:
           restore-keys: spm-
 
       - name: Build universal Release (unsigned)
+        # CMUX_SKIP_ZIG_BUILD=1: the in-Xcode script phase would otherwise invoke
+        # zig to build the Ghostty CLI helper, which cannot link against the
+        # macOS 26 SDK. Skip it here and install the prebuilt helper (from the
+        # macos-15 job) immediately after.
         run: |
-          xcodebuild -scheme cmux -configuration Release -derivedDataPath build-universal \
+          CMUX_SKIP_ZIG_BUILD=1 xcodebuild -scheme cmux -configuration Release -derivedDataPath build-universal \
             -destination 'generic/platform=macOS' \
             -clonedSourcePackagesDirPath .spm-cache \
             ARCHS="arm64 x86_64" \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO build
+
+      - name: Download universal Ghostty CLI helper
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: cmux-ghostty-cli-helper
+          path: ghostty-cli-helper
+
+      - name: Install universal Ghostty CLI helper
+        run: |
+          set -euo pipefail
+          ./scripts/install-prebuilt-ghostty-cli-helper.sh \
+            ghostty-cli-helper/ghostty \
+            build-universal/Build/Products/Release/cmux.app
 
       - name: Verify universal binaries
         run: |
