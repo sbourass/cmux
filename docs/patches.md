@@ -12,7 +12,7 @@ The live, machine-readable list is always:
 git log --oneline --no-merges v<upstream-base>..sb-main
 ```
 
-**Last synced upstream base:** `v0.64.11` (shipped as `v0.64.11-sb.1`)
+**Last synced upstream base:** `v0.64.19` (shipped as `v0.64.19-sb.1`)
 
 > Maintenance: this file is updated as part of every fork release — see
 > [fork-release.md](./fork-release.md) → "Shipping a release", step "Update patches.md".
@@ -48,7 +48,7 @@ step — that is what actually protects the fork.
 These change cmux's runtime behavior versus upstream.
 
 ### 1. Per-pane shell history isolation
-- **Commit subject:** `Add per-pane shell history isolation`
+- **Commit subject:** `fork(patch): per-pane shell history isolation`
 - **Purpose:** each terminal pane gets its own command history file
   (`~/Library/Application Support/cmux/panel-history/<uuid>.zsh_history`), keyed by a
   stable UUID stored in the session snapshot. Pressing ↑ in a pane recalls only that
@@ -56,9 +56,10 @@ These change cmux's runtime behavior versus upstream.
 - **Key code (source of truth):**
   - `Sources/App/WorkspaceRuntimeSettings.swift` — `PerPaneShellHistorySettings`
     enum (UserDefaults key `terminal.perPaneShellHistory`, default `true`).
-  - `Sources/GhosttyTerminalView.swift` — sets `CMUX_PANEL_HISTFILE` env per surface
-    (in/after `applyManagedCmuxContextEnvironment`), gated on
-    `PerPaneShellHistorySettings.isEnabled()`; `historyFileId` on `TerminalSurface`.
+  - `Sources/TerminalSurfaceRuntimeWiring.swift` — sets `CMUX_PANEL_HISTFILE` env per
+    surface, gated on `PerPaneShellHistorySettings.isEnabled()`; `historyFileId` on
+    `TerminalSurface`. (Was `Sources/GhosttyTerminalView.swift` pre-v0.64.19; upstream
+    extracted the surface env wiring into this file.)
   - `Sources/SessionPersistence.swift` — `SessionPanelHistoryStore` (env key
     `CMUX_PANEL_HISTFILE`, `panel-history` dir, orphan sweep), `historyFileId` in the
     terminal snapshot.
@@ -89,26 +90,30 @@ These change cmux's runtime behavior versus upstream.
   (`CMUX_PANEL_HISTFILE`, shell integration) is stable.
 
 ### 2. Default anonymous telemetry to off
-- **Commit subject:** `Default anonymous telemetry to off`
+- **Commit subject:** `fork(patch): default anonymous telemetry to off`
 - **Purpose:** fresh installs are opt-in (telemetry off) rather than opt-out. Existing
   users keep their stored preference (the default is only consulted when the
   `sendAnonymousTelemetry` key is unset).
-- **Key code (source of truth — there are TWO defaults, both must be `false`):**
-  - `Sources/cmuxApp.swift` — `TelemetrySettings.defaultSendAnonymousTelemetry = false`
-    (drives the actual send gate `TelemetrySettings.enabledForCurrentLaunch`).
+- **Key code (source of truth — as of v0.64.19 there is a SINGLE default):**
   - `Packages/CmuxSettings/.../Keys/AppCatalogSection.swift` — catalog key
-    `app.sendAnonymousTelemetry` `defaultValue: false` (drives the **Settings UI toggle**;
-    same UserDefaults key `sendAnonymousTelemetry`).
+    `app.sendAnonymousTelemetry` `defaultValue: false`. This is the one and only
+    default: it drives both the **Settings UI toggle** and the actual send gate.
+    (UserDefaults key `sendAnonymousTelemetry`.)
+  - `Sources/cmuxApp.swift` — `TelemetrySettings.enabledForCurrentLaunch` reads that
+    catalog default directly (`AppCatalogSection().sendAnonymousTelemetry.value(in: .standard)`),
+    frozen once at launch. It holds **no** default of its own anymore.
   - `cmuxTests/GhosttyConfigTests.swift` — `testTelemetryDefaultsToDisabledWhenUnset`.
 - **Verify:**
   1. With the key unset (`defaults read <bundle-id> sendAnonymousTelemetry` → "does not
      exist"), the Settings telemetry toggle shows **OFF**.
   2. Actual sending is gated off: `TelemetrySettings.enabledForCurrentLaunch` is `false`
      when unset (used by `SentryHelper`, `PostHogAnalytics`, `AppDelegate`).
-- **Rot watch:** **two sources of truth** for one UserDefaults key — the
-  `TelemetrySettings` enum default *and* the `CmuxSettings` catalog `DefaultsKey` default.
-  They were split by upstream in v0.64.11. If a sync touches either, set **both** to
-  `false`. If upstream adds a third reader, default it off too.
+- **Rot watch:** upstream **collapsed** this to a single source of truth in v0.64.19 —
+  the standalone `TelemetrySettings.defaultSendAnonymousTelemetry` enum constant (a
+  second default introduced in v0.64.11) is gone; the enum now delegates to the catalog
+  key. The fork patch is now the one-line catalog flip (`defaultValue: true → false`).
+  If a future upstream reintroduces a separate enum/reader default, set that to `false`
+  too — the failure mode is a UI toggle or send gate that no longer follows the catalog.
 
 ---
 
@@ -117,27 +122,36 @@ These change cmux's runtime behavior versus upstream.
 Fork-only tooling for building/shipping the fork. Not behavioral patches to cmux; they
 do not need per-sync behavior verification, but should still be checked to apply cleanly.
 
-- `Support -sb.N suffix in bump-version.sh` — version scheme `X.Y.Z-sb.N`
+- `fork(infra): support -sb.N suffix in bump-version.sh` — version scheme `X.Y.Z-sb.N`
   (`scripts/bump-version.sh`).
-- `Add fork-release workflow` — `.github/workflows/fork-release.yml`: ad-hoc-signed,
-  Sparkle-stripped DMG on `v*-sb.*` tag push.
-- `Add homebrew tap updater workflow` — `.github/workflows/update-homebrew-tap.yml`:
-  chains off Fork Release via `workflow_run`, rewrites `Casks/cmux.rb` in
-  `sbourass/homebrew-cmux`.
-- `Add fork-release and build-env docs` — `docs/fork-release.md`, `docs/build-env.md`.
-- `Add preflight checklist to fork-release docs` — preflight section in
+- `fork(infra): add fork-release workflow` — `.github/workflows/fork-release.yml`:
+  ad-hoc-signed, Sparkle-stripped DMG on `v*-sb.*` tag push.
+- `fork(infra): add homebrew tap updater workflow` —
+  `.github/workflows/update-homebrew-tap.yml`: chains off Fork Release via
+  `workflow_run`, rewrites `Casks/cmux.rb` in `sbourass/homebrew-cmux`.
+- `fork(infra): add fork-release and build-env docs` — `docs/fork-release.md`,
+  `docs/build-env.md`.
+- `fork(infra): add preflight checklist to fork-release docs` — preflight section in
   `docs/fork-release.md`.
-- `Add docs/patches.md fork patch index + wire into release process` — this index
+- `fork(infra): add patches.md fork patch index + wire into release` — this index
   (`docs/patches.md`) and its release-step wiring in `docs/fork-release.md`.
-- `Harden fork release workflow` — robustness fixes to
+- `fork(infra): harden fork release workflow` — robustness fixes to
   `.github/workflows/fork-release.yml`.
-- `docs(fork-release): note attestation, generated release notes, and disabled fork CI workflows`
+- `fork(infra): note attestation, generated release notes, disabled upstream CI`
   — DMG build provenance attestation, per-tag generated release notes, and the
   rationale for disabling conflicting upstream workflows (`docs/fork-release.md`).
-- `Add cmux-fork-release skill` — the agent skill that orchestrates this
+- `fork(infra): add cmux-fork-release skill` — the agent skill that orchestrates this
   sync-and-release pipeline end to end (`skills/cmux-fork-release/SKILL.md`, symlinked
   from `.claude/skills/`). Wraps `docs/fork-release.md` + this index and adds the
   Claude-Code operating lessons (sandbox/git, `gh` 502 false-positives, force-with-lease).
+- `fork(infra): add fork commit naming convention` — the `fork(patch):` / `fork(infra):`
+  scoped-subject convention, documented in `docs/fork-release.md`, this index, and the
+  `cmux-fork-release` skill.
+- `fork(infra): raise fork-release job timeout to 120m` — longer CI job timeout for the
+  full DMG build (`.github/workflows/fork-release.yml`).
+- `fork(infra): split zig CLI helper onto macos-15 for macOS 26 SDK` — build the zig CLI
+  helper on a macos-15 runner so it links against the macOS 26 SDK
+  (`.github/workflows/fork-release.yml`).
 
 ---
 
