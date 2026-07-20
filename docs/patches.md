@@ -12,7 +12,7 @@ The live, machine-readable list is always:
 git log --oneline --no-merges v<upstream-base>..sb-main
 ```
 
-**Last synced upstream base:** `v0.64.11` (shipped as `v0.64.11-sb.1`)
+**Last synced upstream base:** `v0.64.20` (shipped as `v0.64.20-sb.1`)
 
 > Maintenance: this file is updated as part of every fork release — see
 > [fork-release.md](./fork-release.md) → "Shipping a release", step "Update patches.md".
@@ -48,7 +48,7 @@ step — that is what actually protects the fork.
 These change cmux's runtime behavior versus upstream.
 
 ### 1. Per-pane shell history isolation
-- **Commit subject:** `Add per-pane shell history isolation`
+- **Commit subject:** `fork(patch): per-pane shell history isolation`
 - **Purpose:** each terminal pane gets its own command history file
   (`~/Library/Application Support/cmux/panel-history/<uuid>.zsh_history`), keyed by a
   stable UUID stored in the session snapshot. Pressing ↑ in a pane recalls only that
@@ -56,9 +56,11 @@ These change cmux's runtime behavior versus upstream.
 - **Key code (source of truth):**
   - `Sources/App/WorkspaceRuntimeSettings.swift` — `PerPaneShellHistorySettings`
     enum (UserDefaults key `terminal.perPaneShellHistory`, default `true`).
-  - `Sources/GhosttyTerminalView.swift` — sets `CMUX_PANEL_HISTFILE` env per surface
-    (in/after `applyManagedCmuxContextEnvironment`), gated on
+  - `Sources/TerminalSurfaceRuntimeWiring.swift` — sets `CMUX_PANEL_HISTFILE` env per
+    surface (in the terminal-surface init that merges `additionalEnvironment`), gated on
     `PerPaneShellHistorySettings.isEnabled()`; `historyFileId` on `TerminalSurface`.
+    (Upstream extracted this out of `Sources/GhosttyTerminalView.swift` around v0.64.1x —
+    re-check this path after a sync.)
   - `Sources/SessionPersistence.swift` — `SessionPanelHistoryStore` (env key
     `CMUX_PANEL_HISTFILE`, `panel-history` dir, orphan sweep), `historyFileId` in the
     terminal snapshot.
@@ -89,26 +91,33 @@ These change cmux's runtime behavior versus upstream.
   (`CMUX_PANEL_HISTFILE`, shell integration) is stable.
 
 ### 2. Default anonymous telemetry to off
-- **Commit subject:** `Default anonymous telemetry to off`
+- **Commit subject:** `fork(patch): default anonymous telemetry to off`
 - **Purpose:** fresh installs are opt-in (telemetry off) rather than opt-out. Existing
   users keep their stored preference (the default is only consulted when the
   `sendAnonymousTelemetry` key is unset).
-- **Key code (source of truth — there are TWO defaults, both must be `false`):**
-  - `Sources/cmuxApp.swift` — `TelemetrySettings.defaultSendAnonymousTelemetry = false`
-    (drives the actual send gate `TelemetrySettings.enabledForCurrentLaunch`).
-  - `Packages/CmuxSettings/.../Keys/AppCatalogSection.swift` — catalog key
-    `app.sendAnonymousTelemetry` `defaultValue: false` (drives the **Settings UI toggle**;
-    same UserDefaults key `sendAnonymousTelemetry`).
-  - `cmuxTests/GhosttyConfigTests.swift` — `testTelemetryDefaultsToDisabledWhenUnset`.
+- **Key code (source of truth — a SINGLE catalog-backed default as of v0.64.20):**
+  - `Packages/macOS/CmuxSettings/Sources/CmuxSettings/Keys/AppCatalogSection.swift` —
+    catalog key `app.sendAnonymousTelemetry` `defaultValue: false` (UserDefaults key
+    `sendAnonymousTelemetry`). This is the fork's only behavioral change (upstream ships
+    `true`).
+  - `Sources/cmuxApp.swift` — `TelemetrySettings.enabledForCurrentLaunch =
+    AppCatalogSection().sendAnonymousTelemetry.value(in: .standard)`. **Reads the catalog
+    key directly**, so it and the Settings UI toggle both flow from the single catalog
+    default above. This drives the send gate used by `SentryHelper`, `PostHogAnalytics`,
+    `AppDelegate`, `GhosttyTerminalView`.
+  - `cmuxTests/GhosttyConfigTests.swift` — `testTelemetryDefaultsToDisabledWhenUnset`
+    (asserts `false` when the key is unset).
 - **Verify:**
   1. With the key unset (`defaults read <bundle-id> sendAnonymousTelemetry` → "does not
      exist"), the Settings telemetry toggle shows **OFF**.
   2. Actual sending is gated off: `TelemetrySettings.enabledForCurrentLaunch` is `false`
      when unset (used by `SentryHelper`, `PostHogAnalytics`, `AppDelegate`).
-- **Rot watch:** **two sources of truth** for one UserDefaults key — the
-  `TelemetrySettings` enum default *and* the `CmuxSettings` catalog `DefaultsKey` default.
-  They were split by upstream in v0.64.11. If a sync touches either, set **both** to
-  `false`. If upstream adds a third reader, default it off too.
+- **Rot watch:** upstream v0.64.11 split this into two defaults (a `TelemetrySettings` enum
+  default *and* the catalog `DefaultsKey`); v0.64.20 re-consolidated to the **single**
+  catalog `defaultValue` (`enabledForCurrentLaunch` now reads the catalog directly). Keep
+  the catalog `defaultValue` at `false`. If a future sync re-introduces a separate enum/const
+  default or a third reader that does **not** go through `AppCatalogSection().sendAnonymousTelemetry`,
+  set that one to `false` too — this is the patch that has silently regressed on a refactor before.
 
 ---
 
@@ -138,6 +147,15 @@ do not need per-sync behavior verification, but should still be checked to apply
   sync-and-release pipeline end to end (`skills/cmux-fork-release/SKILL.md`, symlinked
   from `.claude/skills/`). Wraps `docs/fork-release.md` + this index and adds the
   Claude-Code operating lessons (sandbox/git, `gh` 502 false-positives, force-with-lease).
+- `Add fork commit naming convention` — the `fork(patch):` / `fork(infra):` scoped-subject
+  convention documented in `docs/fork-release.md`, this index, and the `cmux-fork-release`
+  skill; applied during the sync rebase reword.
+- `Raise fork-release job timeout to 120m` — bumps the Fork Release job timeout in
+  `.github/workflows/fork-release.yml` so full SPM resolution + build fits on the
+  GitHub-hosted `macos-latest` runner.
+- `Split zig CLI helper onto macos-15 for macOS 26 SDK` — pins the zig CLI-helper build
+  step to a `macos-15` runner in `.github/workflows/fork-release.yml` to avoid the macOS 26
+  SDK toolchain mismatch.
 
 ---
 
