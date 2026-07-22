@@ -138,7 +138,7 @@ git push --force-with-lease origin sb-main
 git push origin v<LATEST>-sb.1
 ```
 
-The `v*-sb.*` tag fires **Fork Release** (ad-hoc-signed, Sparkle-stripped DMG, attested) → **Update Homebrew Tap** chains off it via `workflow_run` and rewrites `Casks/cmux.rb` in `sbourass/homebrew-cmux`.
+The `v*-sb.*` tag fires **Fork Release** (ad-hoc-signed, Sparkle-stripped DMG, attested) → **Update Homebrew Tap** chains off it via `workflow_run` and rewrites `Casks/cmux-sb.rb` in `sbourass/homebrew-cmux`. (Token is `cmux-sb`, not `cmux` — the bare `cmux` collides with upstream's official homebrew/cask and gets silently preferred by brew; see `docs/fork-release.md` → Gotchas #6.)
 
 ### 5. Watch & verify
 
@@ -149,10 +149,10 @@ gh run view "$RUN" --repo sbourass/cmux --json status,conclusion --jq '.status+"
 
 gh release view v<LATEST>-sb.1 --repo sbourass/cmux --json assets --jq '[.assets[].name]'   # cmux-macos.dmg present
 gh run list --repo sbourass/cmux --workflow "Update Homebrew Tap" --limit 1                  # success, chained
-gh api repos/sbourass/homebrew-cmux/contents/Casks/cmux.rb --jq .content | base64 -d | grep -E 'version|sha256'  # cask bumped
+gh api repos/sbourass/homebrew-cmux/contents/Casks/cmux-sb.rb --jq .content | base64 -d | grep -E 'version|sha256'  # cask bumped
 ```
 
-Optionally end-to-end: `gh attestation verify <dmg> --repo sbourass/cmux` and `brew update && brew upgrade --cask sbourass/cmux/cmux`.
+Optionally end-to-end: `gh attestation verify <dmg> --repo sbourass/cmux` and `brew update && brew upgrade --cask sbourass/cmux/cmux-sb`.
 
 When the release is confirmed published, the `sb-main-presync-backup` ref can be deleted.
 
