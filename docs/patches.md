@@ -122,7 +122,7 @@ do not need per-sync behavior verification, but should still be checked to apply
 - `Add fork-release workflow` — `.github/workflows/fork-release.yml`: ad-hoc-signed,
   Sparkle-stripped DMG on `v*-sb.*` tag push.
 - `Add homebrew tap updater workflow` — `.github/workflows/update-homebrew-tap.yml`:
-  chains off Fork Release via `workflow_run`, rewrites `Casks/cmux.rb` in
+  chains off Fork Release via `workflow_run`, rewrites `Casks/cmux-sb.rb` in
   `sbourass/homebrew-cmux`.
 - `Add fork-release and build-env docs` — `docs/fork-release.md`, `docs/build-env.md`.
 - `Add preflight checklist to fork-release docs` — preflight section in
