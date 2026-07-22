@@ -108,7 +108,7 @@ gh run watch --repo sbourass/cmux
 ```
 
 Once `Fork Release` completes, `Update Homebrew Tap` chains off it via
-`workflow_run` and rewrites `Casks/cmux.rb` in the tap repo.
+`workflow_run` and rewrites `Casks/cmux-sb.rb` in the tap repo.
 
 ### Commit naming convention
 
@@ -211,9 +211,9 @@ gh workflow run "Update Homebrew Tap" \
 gh release view v<X.Y.Z-sb.N> --repo sbourass/cmux        # check DMG asset present
 gh release download v<X.Y.Z-sb.N> --repo sbourass/cmux --pattern cmux-macos.dmg  # fetch it locally
 gh attestation verify cmux-macos.dmg --repo sbourass/cmux  # verify build provenance (needs the local file)
-gh api repos/sbourass/homebrew-cmux/contents/Casks/cmux.rb --jq .content \
+gh api repos/sbourass/homebrew-cmux/contents/Casks/cmux-sb.rb --jq .content \
   | base64 -d | grep -E 'version|sha256'                   # check cask updated
-brew update && brew upgrade --cask sbourass/cmux/cmux      # end-to-end
+brew update && brew upgrade --cask sbourass/cmux/cmux-sb   # end-to-end
 ```
 
 ---
@@ -242,7 +242,15 @@ brew update && brew upgrade --cask sbourass/cmux/cmux      # end-to-end
 
 5. **`workflow_run.head_branch` is the tag name for tag-triggered runs.** `update-homebrew-tap.yml` relies on this. Don't change the trigger source without updating the version-extraction logic.
 
-6. **The `cmux` cask token collides with upstream's tap.** Users must `brew uninstall --cask cmux` from upstream before installing from the fork tap. The cask `caveats` block documents this.
+6. **The cask token is `cmux-sb`, not `cmux` — deliberately.** The bare token `cmux`
+   collides with upstream's **official homebrew/cask `cmux`**, which outranks
+   third-party taps, so `brew upgrade cmux` silently resolves to upstream and drops the
+   fork. The tap cask was renamed `cmux → cmux-sb` on 2026-06-29 to fix this; the
+   tap-updater writes `Casks/cmux-sb.rb` and removes any stale `Casks/cmux.rb`. Install
+   and upgrade with `brew install/upgrade --cask sbourass/cmux/cmux-sb`. Both casks still
+   install `cmux.app` with bundle id `com.cmuxterm.app`, so the fork and upstream's cmux
+   can't be installed at the same time (the `caveats` block documents this) — but the
+   distinct token stops `brew upgrade` from silently swapping the fork for upstream.
 
 ---
 
