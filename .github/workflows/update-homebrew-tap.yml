@@ -100,8 +100,8 @@ jobs:
           SHA256: ${{ steps.sha.outputs.sha256 }}
         run: |
           set -euo pipefail
-          cat > tap/Casks/cmux.rb <<'CASKEOF'
-          cask "cmux" do
+          cat > tap/Casks/cmux-sb.rb <<'CASKEOF'
+          cask "cmux-sb" do
             version "__VERSION__"
             sha256 "__SHA256__"
 
@@ -115,7 +115,7 @@ jobs:
               strategy :github_latest
             end
 
-            depends_on macos: ">= :sonoma"
+            depends_on macos: :sonoma
 
             app "cmux.app"
             binary "#{appdir}/cmux.app/Contents/Resources/bin/cmux"
@@ -127,8 +127,8 @@ jobs:
 
                 xattr -dr com.apple.quarantine /Applications/cmux.app
 
-              Conflicts with the upstream `manaflow-ai/cmux` cask (same cask token);
-              install only one at a time.
+              Conflicts with the upstream `cmux` cask (both install cmux.app and share
+              the com.cmuxterm.app bundle id); install only one at a time.
 
               Uninstalling keeps your cmux preferences and session state (shared with
               the upstream cmux app). `brew uninstall --zap` additionally clears this
@@ -150,15 +150,19 @@ jobs:
             ]
           end
           CASKEOF
-          sed -i 's/^          //' tap/Casks/cmux.rb
-          sed -i "s|__VERSION__|${VERSION}|" tap/Casks/cmux.rb
-          sed -i "s|__SHA256__|${SHA256}|" tap/Casks/cmux.rb
+          sed -i 's/^          //' tap/Casks/cmux-sb.rb
+          sed -i "s|__VERSION__|${VERSION}|" tap/Casks/cmux-sb.rb
+          sed -i "s|__SHA256__|${SHA256}|" tap/Casks/cmux-sb.rb
+          # The bare `cmux` token collides with upstream's official homebrew/cask
+          # (it outranks third-party taps, so `brew upgrade cmux` silently swaps in
+          # upstream). The fork ships as token `cmux-sb`; remove any stale cmux.rb.
+          rm -f tap/Casks/cmux.rb
 
       - name: Verify cask SHA matches DMG
         if: steps.version.outputs.skip != 'true'
         run: |
           set -euo pipefail
-          CASK_SHA=$(grep 'sha256' tap/Casks/cmux.rb | sed 's/.*"\(.*\)".*/\1/')
+          CASK_SHA=$(grep 'sha256' tap/Casks/cmux-sb.rb | sed 's/.*"\(.*\)".*/\1/')
           ACTUAL_SHA=$(shasum -a 256 cmux.dmg | cut -d' ' -f1)
           if [ "$CASK_SHA" != "$ACTUAL_SHA" ]; then
             echo "SHA mismatch! Cask: $CASK_SHA, Actual: $ACTUAL_SHA" >&2
@@ -175,10 +179,11 @@ jobs:
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Casks/cmux.rb
+          git add Casks/cmux-sb.rb
+          git rm -f --ignore-unmatch --quiet Casks/cmux.rb
           if git diff --staged --quiet; then
             echo "No changes - cask already up to date"
           else
-            git commit -m "Update cmux to ${VERSION}"
+            git commit -m "Update cmux-sb to ${VERSION}"
             git push
           fi
