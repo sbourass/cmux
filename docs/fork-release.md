@@ -56,8 +56,13 @@ gh secret list --repo sbourass/cmux
 gh workflow list --repo sbourass/cmux
 
 # Conflicting upstream workflows still disabled?
-gh workflow list --repo sbourass/cmux --all | grep -E 'Release macOS app|Nightly|Update Homebrew Cask'
+gh workflow list --repo sbourass/cmux --all | grep -E 'Release macOS app|Nightly|Update Homebrew Cask|Deploy docs channels'
 # Each should show "disabled_manually"
+
+# Any NEW upstream workflow that fires on our release tag? (added in the v0.64.22 sync,
+# which is when "Deploy docs channels" showed up and would have failed on every fork tag)
+# Anything listed here other than fork-release.yml must be disabled on the fork.
+grep -lE 'tags:\s*(\["v\*"\]|$)' .github/workflows/*.yml | xargs grep -l 'v\*'
 
 # Upstream CI workflows that require paid macOS runners still disabled?
 # The fork has no Blacksmith/Warp runner, so their macOS jobs (runs-on:
@@ -167,14 +172,25 @@ second-source-of-truth). Then ship a new release with `bump-version.sh <upstream
 
 ### Recurring conflict files
 
-The `feat/per-pane-shell-history` patch reliably conflicts on these files
-during upstream rebase. Resolutions are mechanical — usually combining new
-parameter lists.
+The per-pane-shell-history patch reliably conflicts on these files during upstream
+rebase. Resolutions are mechanical — usually combining new parameter lists, i.e. keep
+**both** sides rather than taking ours/theirs.
 
-- `Sources/GhosttyTerminalView.swift`
-- `Sources/SessionPersistence.swift`
-- `Sources/Workspace.swift`
-- `Sources/Panels/TerminalPanel.swift`
+- `Packages/macOS/CmuxTerminal/Sources/CmuxTerminal/Surface/TerminalSurface.swift` — the
+  `historyFileId` property + `init` parameter. **New location as of `v0.64.22`**; upstream
+  moved `TerminalSurface` out of `Sources/GhosttyTerminalView.swift` into the `CmuxTerminal`
+  package. In that sync it conflicted twice, both times because upstream added a field
+  (`terminalLifecycleId`) adjacent to the fork's — resolution was to keep both.
+- `Sources/Workspace.swift` — the restore call site; conflicts when upstream adds another
+  argument (e.g. `terminalFontSizeCreationPolicy:`) next to `historyFileId:`.
+- `Sources/SessionPersistence.swift`, `Sources/Panels/TerminalPanel.swift` — historically
+  conflicted; auto-merged cleanly in `v0.64.22`.
+- `Sources/GhosttyTerminalView.swift` — no longer a conflict site after the `CmuxTerminal`
+  extraction, despite heavy upstream churn.
+- `cmux.xcodeproj/project.pbxproj` — always conflicts, but only on the stale
+  `Bump to <prev>-sb.N` commit, which is meant to be `git rebase --skip`ped (see the trap
+  note in [patches.md](./patches.md) → "Release bookkeeping": the skip also reverts
+  `patches.md`).
 
 ---
 
@@ -235,6 +251,14 @@ brew update && brew upgrade --cask sbourass/cmux/cmux-sb   # end-to-end
 1. **`workflow_run` triggers only fire from the default branch.** The fork's default branch must be `sb-main` (not `main`) for `Update Homebrew Tap` to listen for `Fork Release` completions. Don't change the default.
 
 2. **Upstream's `v*` tag pattern collides.** Upstream workflows that trigger on `v*` (`Release macOS app`, etc.) would fire alongside `fork-release.yml` and fail noisily on missing Apple/Sparkle secrets. They are disabled on the fork via `gh workflow disable`. Re-disable any time an upstream sync re-enables them.
+
+   A sync can also introduce a **brand-new** colliding workflow, which the preflight's
+   fixed name list will not catch. The `v0.64.22` sync added `docs-channels.yml`
+   ("Deploy docs channels", `tags: ["v*"]`), whose `release` job would fire on every
+   `v*-sb.*` tag and fail on the fork's missing `VERCEL_*` secrets; it was disabled on
+   2026-08-04. Use the tag-pattern grep in Preflight to enumerate them rather than
+   trusting the name list. Note `mux-sdk-v*` / `cmux-sdk-v*` / `cmux-tui-v*` patterns do
+   **not** match a `v…` tag, so those SDK/TUI publish workflows are safe to leave active.
 
 3. **`bump-version.sh` chases upstream's Sparkle build number.** It curls `manaflow-ai/cmux`'s appcast and forces `CURRENT_PROJECT_VERSION` ≥ upstream's. Cosmetic, harmless — fork build numbers climb in lockstep with upstream's.
 
