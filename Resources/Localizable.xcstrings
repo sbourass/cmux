@@ -197282,6 +197282,57 @@
         }
       }
     },
+    "settings.terminal.perPaneShellHistory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per-Pane Shell History"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ペインごとのシェル履歴"
+          }
+        }
+      }
+    },
+    "settings.terminal.perPaneShellHistory.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All panes share your shell's default history file (typically ~/.zsh_history). Takes effect for new panes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのペインがシェルの既定の履歴ファイル（通常は ~/.zsh_history）を共有します。新しいペインから適用されます。"
+          }
+        }
+      }
+    },
+    "settings.terminal.perPaneShellHistory.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each terminal pane gets its own command history (HISTFILE) that survives quitting and reopening. New panes start empty."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "各ターミナルペインが独自のコマンド履歴（HISTFILE）を持ち、終了して再度開いても保持されます。新しいペインは空の状態で始まります。"
+          }
+        }
+      }
+    },
     "settings.terminal.rendererRealization": {
       "extractionState": "manual",
       "localizations": {
