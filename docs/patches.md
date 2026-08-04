@@ -85,6 +85,10 @@ These change cmux's runtime behavior versus upstream.
     (search entry),
     `Packages/macOS/CmuxSettingsUI/.../SettingsRowAnchorResolutionTests.swift` (test
     contract path), `Sources/SettingsNavigation.swift` (legacy in-app search entry).
+  - `Resources/Localizable.xcstrings` — `en` + `ja` for the three row strings
+    (`settings.terminal.perPaneShellHistory`, `.subtitleOn`, `.subtitleOff`). The row is
+    rendered from `CmuxSettingsUI`, which has no catalog of its own, so these live in the
+    app-level catalog alongside the 60-odd upstream `settings.terminal.*` keys.
   - Spec: `docs/per-pane-shell-history.md`.
 - **Verify:**
   1. Settings → Terminal shows a **"Per-Pane Shell History"** toggle (after "Resume
@@ -93,6 +97,11 @@ These change cmux's runtime behavior versus upstream.
      `cmux send --surface surface:N 'echo $HISTFILE'` then `cmux read-screen …` for two
      surfaces — paths differ and end in `panel-history/<uuid>.zsh_history`.
   3. Each pane's history file contains only its own commands.
+  4. Localization: the three `settings.terminal.perPaneShellHistory*` keys exist in
+     `Resources/Localizable.xcstrings` with **both** `en` and `ja`, and each `en` value is
+     byte-identical to the `defaultValue` in `TerminalSection.swift`. A `defaultValue`
+     English fallback alone does **not** count as localized (repo policy), and the row
+     silently renders English on a Japanese system if the keys go missing — no build error.
 - **Rot watch:** the settings UI is the fragile part. Upstream's settings live in the
   `CmuxSettingsUI` catalog system (catalog key → `DefaultsValueModel` → `SettingsCardRow`
   + curated search entry + anchor test). If a future upstream moves/renames that, re-port
