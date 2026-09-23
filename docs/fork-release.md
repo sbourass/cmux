@@ -183,6 +183,23 @@ rebase. Resolutions are mechanical — usually combining new parameter lists, i.
   (`terminalLifecycleId`) adjacent to the fork's — resolution was to keep both.
 - `Sources/Workspace.swift` — the restore call site; conflicts when upstream adds another
   argument (e.g. `terminalFontSizeCreationPolicy:`) next to `historyFileId:`.
+  Conflicted twice in `v0.64.25`: the snapshot `wasAgentRunning:` argument became
+  conditional, and the split-pane `runtimeSpawnPolicy:` argument became a
+  `terminalStartupRestoreCoordinator.runtimeSpawnPolicy(...)` call. Keep upstream's
+  expression and append `historyFileId:` after it.
+- `Sources/AppDelegate.swift` — the startup-snapshot loader. In `v0.64.25` upstream split
+  `prepareStartupSessionSnapshotIfNeeded()` into a crash-recovery-probe wait plus
+  `finishPreparingStartupSessionSnapshot()`. Adopt upstream's split and put the fork's
+  live+backup load and orphan sweep inside `finishPreparingStartupSessionSnapshot()`,
+  replacing its trailing `guard … else { return }` with an `if` so the sweep still runs
+  when restore is disabled.
+- `Sources/SettingsNavigation.swift` / `Sources/SettingsSearchIndex.swift` — in `v0.64.25`
+  upstream moved `SettingsSearchIndex` into its own file. Take upstream's
+  `SettingsNavigation.swift` and re-add the two `per-pane-shell-history` lines in
+  `SettingsSearchIndex.swift`.
+- `Packages/macOS/CmuxSettingsUI/.../Navigation/CuratedSettingEntry+Default.swift` — in
+  `v0.64.25` upstream localized every title. Take upstream's block and insert the fork's
+  localized `per-pane-shell-history` entry after `agent-auto-resume`.
 - `Sources/SessionPersistence.swift`, `Sources/Panels/TerminalPanel.swift` — historically
   conflicted; auto-merged cleanly in `v0.64.22`.
 - `Sources/GhosttyTerminalView.swift` — no longer a conflict site after the `CmuxTerminal`
