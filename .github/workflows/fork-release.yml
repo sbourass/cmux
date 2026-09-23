@@ -152,6 +152,15 @@ jobs:
           key: spm-${{ hashFiles('cmux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: spm-
 
+      - name: Set up Go for the Cloud tunnel extension
+        # Since v0.64.25 the cmuxTunnelExtension target builds wireguard-go
+        # (scripts/build-wireguard-go.sh) and fails without a Go toolchain.
+        # Pin matches upstream's release.yml.
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.x'
+          cache: false
+
       - name: Build universal Release (unsigned)
         # CMUX_SKIP_ZIG_BUILD=1: the in-Xcode script phase would otherwise invoke
         # zig to build the Ghostty CLI helper, which cannot link against the
