@@ -160,6 +160,22 @@ When the release is confirmed published, the `sb-main-presync-backup` ref can be
 
 ## Runtime verification of the built app (optional but recommended)
 
+> **Back up `panel-history/` before launching ANY dev build (tagged app or `cmux-unit` test host).**
+> `SessionPanelHistoryStore` uses a fixed `~/Library/Application Support/cmux/panel-history/`
+> directory, not one scoped by bundle id. The startup orphan sweep deletes every file its
+> own bundle's snapshot does not reference. So a dev build deletes the production app's
+> per-pane history files. This happened in the v0.64.25 sync: all 21 files were deleted and
+> then restored from a backup.
+> ```bash
+> H="$HOME/Library/Application Support/cmux/panel-history"; B="$TMPDIR/panel-history-backup"
+> mkdir -p "$B" && cp -p "$H"/* "$B"/          # before launch
+> cp -pn "$B"/* "$H"/                           # after quitting the dev build
+> ```
+> Also, as of v0.64.25, `reload.sh --launch` requires upstream team Stack credentials, which
+> the fork does not have. Build without `--launch`, then run
+> `open -g "/tmp/cmux-sb-sync/Build/Products/Debug/cmux DEV sb-sync.app"`. That is the tagged
+> bundle, so it is isolated. Never open the untagged `cmux DEV.app` next to it.
+
 Drive the tagged build via the debug CLI (`CLAUDE.md` → Local dev). `send` types text without Enter — append `\n`:
 
 ```bash

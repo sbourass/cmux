@@ -12,7 +12,7 @@ The live, machine-readable list is always:
 git log --oneline --no-merges v<upstream-base>..sb-main
 ```
 
-**Last synced upstream base:** `v0.64.22` (shipped as `v0.64.22-sb.1`)
+**Last synced upstream base:** `v0.64.25` (shipped as `v0.64.25-sb.1`)
 
 > Maintenance: this file is updated as part of every fork release — see
 > [fork-release.md](./fork-release.md) → "Shipping a release", step "Update patches.md".
@@ -48,7 +48,9 @@ step — that is what actually protects the fork.
 These change cmux's runtime behavior versus upstream.
 
 ### 1. Per-pane shell history isolation
-- **Commit subject:** `fork(patch): per-pane shell history isolation`
+- **Commit subjects:** `fork(patch): per-pane shell history isolation`,
+  `fork(patch): localize per-pane shell history settings strings` (the `en` + `ja`
+  `Localizable.xcstrings` entries, split out as a follow-up patch)
 - **Purpose:** each terminal pane gets its own command history file
   (`~/Library/Application Support/cmux/panel-history/<uuid>.zsh_history`), keyed by a
   stable UUID stored in the session snapshot. Pressing ↑ in a pane recalls only that
@@ -84,8 +86,15 @@ These change cmux's runtime behavior versus upstream.
     `Packages/macOS/CmuxSettingsUI/.../Navigation/CuratedSettingEntry+Default.swift`
     (search entry),
     `Packages/macOS/CmuxSettingsUI/.../SettingsRowAnchorResolutionTests.swift` (test
-    contract path), `Sources/SettingsNavigation.swift` (legacy in-app search entry).
+    contract path), `Sources/SettingsSearchIndex.swift` (legacy in-app search entry +
+    `settingsPathAnchorIDs` mapping). **Moved in the v0.64.25 sync**: upstream split
+    `SettingsSearchIndex` out of `Sources/SettingsNavigation.swift` into its own file, so
+    the fork's hunk conflicted as a whole-enum delete and had to be re-applied to the new
+    file. Upstream also localized the `CuratedSettingEntry+Default.swift` titles and
+    prefixed synonyms with the English title in that sync; the fork's entry follows suit.
   - `Resources/Localizable.xcstrings` — `en` + `ja` for the three row strings
+    (upstream's own keys now carry 9 locales — ar, de, en, es, fr, ja, ko, zh-Hans, zh-Hant;
+    the fork deliberately ships only en + ja, so other locales fall back to English)
     (`settings.terminal.perPaneShellHistory`, `.subtitleOn`, `.subtitleOff`). The row is
     rendered from `CmuxSettingsUI`, which has no catalog of its own, so these live in the
     app-level catalog alongside the 60-odd upstream `settings.terminal.*` keys.
@@ -113,6 +122,13 @@ These change cmux's runtime behavior versus upstream.
   upstream's existing lines. If a future sync ever drops that hook registration
   (`add-zsh-hook precmd _cmux_history_init`), `HISTFILE` silently falls back to the shared
   global with no compile error — grep for it explicitly.
+
+  **Dev-build hazard:** the `panel-history/` directory is not scoped by bundle id, so a
+  tagged Debug build or the `cmux-unit` test host sweeps away the production app's history
+  files at launch. Back the directory up before any runtime Verify. See the
+  `cmux-fork-release` skill → "Runtime verification". A real fix would scope the directory
+  per bundle or skip the sweep in non-production bundles. That needs a migration for
+  existing files, so it is tracked as a follow-up and not part of this sync.
 
 ### 2. Default anonymous telemetry to off
 - **Commit subject:** `fork(patch): default anonymous telemetry to off`
@@ -195,6 +211,16 @@ Listed in `git log` order (oldest first), with subjects matching the live reword
   — renames the tap cask `cmux` → `cmux-sb` so `brew upgrade` stops silently resolving the
   fork to upstream's official homebrew/cask entry (`.github/workflows/update-homebrew-tap.yml`,
   `docs/fork-release.md`). First shipped in `v0.64.22-sb.1`.
+- `fork(infra): sync patch index to v0.64.22 and harden sync procedure` — refreshes this
+  index for the v0.64.22 base and adds the new-colliding-workflow preflight grep
+  (`docs/patches.md`, `docs/fork-release.md`, the `cmux-fork-release` skill).
+- `fork(infra): sync patch index to v0.64.25 and document new conflict sites` — refreshes
+  this index for the v0.64.25 base and records that sync's conflict resolutions in
+  `docs/fork-release.md` → "Recurring conflict files".
+- **Known gap (pre-existing, not a sync regression):** `terminal.perPaneShellHistory` is
+  not registered in `Sources/CmuxSettingsFileStore+SupportedPaths.swift` or
+  `Sources/CmuxSettingsJSONPathSupport.swift`, so it cannot be set from `cmux.json` even
+  though the Settings row declares `configurationReview: .json(...)`.
 
 ---
 
