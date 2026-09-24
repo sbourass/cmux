@@ -160,12 +160,13 @@ When the release is confirmed published, the `sb-main-presync-backup` ref can be
 
 ## Runtime verification of the built app (optional but recommended)
 
-> **Back up `panel-history/` before launching ANY dev build (tagged app or `cmux-unit` test host).**
-> `SessionPanelHistoryStore` uses a fixed `~/Library/Application Support/cmux/panel-history/`
-> directory, not one scoped by bundle id. The startup orphan sweep deletes every file its
-> own bundle's snapshot does not reference. So a dev build deletes the production app's
-> per-pane history files. This happened in the v0.64.25 sync: all 21 files were deleted and
-> then restored from a backup.
+> **Back up `panel-history/` before launching a dev build of any tree without the bundle-scoping fix**
+> (tagged app or `cmux-unit` test host). Before `fork(patch): scope per-pane history directory
+> by bundle id`, every bundle shared `~/Library/Application Support/cmux/panel-history/`, and
+> the startup orphan sweep deleted every file its own snapshot did not reference. So a dev
+> build deleted the production app's per-pane history files. This happened in the v0.64.25
+> sync: all 21 files were deleted and then restored from a backup. With the fix, dev bundles
+> use `panel-history-<bundleId>/`. The backup is still cheap insurance.
 > ```bash
 > H="$HOME/Library/Application Support/cmux/panel-history"; B="$TMPDIR/panel-history-backup"
 > mkdir -p "$B" && cp -p "$H"/* "$B"/          # before launch
@@ -183,7 +184,8 @@ Drive the tagged build via the debug CLI (`CLAUDE.md` → Local dev). `send` typ
 CMUX_TAG=sb-sync scripts/cmux-debug-cli.sh workspace list
 CMUX_TAG=sb-sync scripts/cmux-debug-cli.sh send --workspace workspace:1 --surface surface:1 'echo HISTFILE=$HISTFILE\n'
 CMUX_TAG=sb-sync scripts/cmux-debug-cli.sh read-screen --workspace workspace:1 --surface surface:1
-# expect: HISTFILE=…/cmux/panel-history/<uuid>.zsh_history  → per-pane-history patch live
+# expect: HISTFILE=…/cmux/panel-history-com.cmuxterm.app.debug.sb.sync/<uuid>.zsh_history
+#         (dev bundle is scoped; the shipped app uses plain panel-history/)
 ```
 
 A window screenshot may be uncapturable: the window can land on a background macOS Space, and forcing a Space switch needs an Accessibility permission `osascript`/`screencapture` won't have non-interactively. For a terminal app, `read-screen` returning live rendered content (not a blank grid) is the meaningful "it launched" evidence.

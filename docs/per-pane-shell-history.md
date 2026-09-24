@@ -51,6 +51,11 @@ other cmux setting.
 ~/Library/Application Support/cmux/panel-history/<uuid>.zsh_history
 ```
 
+That path is for the shipped app (bundle id `com.cmuxterm.app`). Every other
+bundle, such as a tagged Debug build or the unit-test host, uses its own
+directory, `panel-history-<bundleId>/`. This keeps a dev build's startup orphan
+sweep from deleting the shipped app's history files.
+
 One file per pane, keyed by a stable UUID (`historyFileId`) that
 cmux stores in its session snapshot. The same UUID is reused when a
 pane is restored after quit, so the same file is reloaded.
