@@ -50,9 +50,12 @@ These change cmux's runtime behavior versus upstream.
 ### 1. Per-pane shell history isolation
 - **Commit subjects:** `fork(patch): per-pane shell history isolation`,
   `fork(patch): localize per-pane shell history settings strings` (the `en` + `ja`
-  `Localizable.xcstrings` entries, split out as a follow-up patch)
+  `Localizable.xcstrings` entries, split out as a follow-up patch),
+  `fork(patch): add failing tests for bundle-scoped per-pane history directory`,
+  `fork(patch): scope per-pane history directory by bundle id`
 - **Purpose:** each terminal pane gets its own command history file
-  (`~/Library/Application Support/cmux/panel-history/<uuid>.zsh_history`), keyed by a
+  (`~/Library/Application Support/cmux/panel-history/<uuid>.zsh_history` for the shipped
+  `com.cmuxterm.app`; `panel-history-<bundleId>/` for any other bundle), keyed by a
   stable UUID stored in the session snapshot. Pressing ↑ in a pane recalls only that
   pane's commands; history survives quit/reopen. Toggleable (default ON).
 - **Key code (source of truth):**
@@ -71,7 +74,8 @@ These change cmux's runtime behavior versus upstream.
     `TerminalSurfaceRuntimeWiring` because `SessionPanelHistoryStore` /
     `PerPaneShellHistorySettings` are app-layer types `CmuxTerminal` cannot import.
   - `Sources/SessionPersistence.swift` — `SessionPanelHistoryStore` (env key
-    `CMUX_PANEL_HISTFILE`, `panel-history` dir, orphan sweep), `historyFileId` in the
+    `CMUX_PANEL_HISTFILE`, bundle-scoped `panel-history` dir via
+    `directoryName(forBundleIdentifier:)`, orphan sweep), `historyFileId` in the
     terminal snapshot.
   - `Sources/Workspace.swift`, `Sources/Workspace+PanelLifecycle.swift`,
     `Sources/Panels/TerminalPanel.swift`, `Sources/AppDelegate.swift` — plumb
@@ -104,7 +108,8 @@ These change cmux's runtime behavior versus upstream.
      Agent Sessions on Reopen"), default ON.
   2. Two panes get **distinct** `$HISTFILE` paths under `panel-history/`. CLI check:
      `cmux send --surface surface:N 'echo $HISTFILE'` then `cmux read-screen …` for two
-     surfaces — paths differ and end in `panel-history/<uuid>.zsh_history`.
+     surfaces — paths differ and end in `panel-history/<uuid>.zsh_history` (shipped app)
+     or `panel-history-<bundleId>/<uuid>.zsh_history` (tagged dev build).
   3. Each pane's history file contains only its own commands.
   4. Localization: the three `settings.terminal.perPaneShellHistory*` keys exist in
      `Resources/Localizable.xcstrings` with **both** `en` and `ja`, and each `en` value is
@@ -123,12 +128,13 @@ These change cmux's runtime behavior versus upstream.
   (`add-zsh-hook precmd _cmux_history_init`), `HISTFILE` silently falls back to the shared
   global with no compile error — grep for it explicitly.
 
-  **Dev-build hazard:** the `panel-history/` directory is not scoped by bundle id, so a
-  tagged Debug build or the `cmux-unit` test host sweeps away the production app's history
-  files at launch. Back the directory up before any runtime Verify. See the
-  `cmux-fork-release` skill → "Runtime verification". A real fix would scope the directory
-  per bundle or skip the sweep in non-production bundles. That needs a migration for
-  existing files, so it is tracked as a follow-up and not part of this sync.
+  **Bundle scoping (fixed after `v0.64.25-sb.1`):** before the fix, `panel-history/` was
+  shared by every bundle, so a tagged Debug build or the `cmux-unit` test host swept away the
+  production app's history files at launch. Now only `com.cmuxterm.app` uses
+  `panel-history/`; other bundles use `panel-history-<bundleId>/`, so no migration was
+  needed. Guarded by the `SessionPersistenceTests` `testDevBuildOrphanSweepDoesNotDelete…`
+  family. If a sync changes how `SessionSnapshotRepository` resolves the bundle id, keep the
+  two resolvers in agreement. Any build from before the fix is still dangerous to launch.
 
 ### 2. Default anonymous telemetry to off
 - **Commit subject:** `fork(patch): default anonymous telemetry to off`
