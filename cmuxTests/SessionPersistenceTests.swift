@@ -21,6 +21,122 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(SessionSidebarSelection(selection: .notifications), .tabs)
     }
 
+    // MARK: - Per-pane shell history directory scoping (fork patch)
+
+    private func makePanelHistoryTempAppSupport() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cmux-panel-history-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        return root
+    }
+
+    private func writePanelHistoryFile(_ id: UUID, in directory: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(id.uuidString).zsh_history")
+        try Data("echo hi\n".utf8).write(to: url)
+        return url
+    }
+
+    func testPanelHistoryProductionBundleKeepsLegacyDirectory() throws {
+        let appSupport = try makePanelHistoryTempAppSupport()
+        let legacy = appSupport
+            .appendingPathComponent("cmux", isDirectory: true)
+            .appendingPathComponent("panel-history", isDirectory: true)
+        for bundleIdentifier in ["com.cmuxterm.app", nil, "  "] as [String?] {
+            XCTAssertEqual(
+                SessionPanelHistoryStore.historyDirectoryURL(
+                    appSupportDirectory: appSupport,
+                    bundleIdentifier: bundleIdentifier
+                )?.standardizedFileURL,
+                legacy.standardizedFileURL
+            )
+        }
+    }
+
+    func testPanelHistoryNonProductionBundleUsesScopedDirectory() throws {
+        let appSupport = try makePanelHistoryTempAppSupport()
+        let scoped = SessionPanelHistoryStore.historyDirectoryURL(
+            appSupportDirectory: appSupport,
+            bundleIdentifier: "com.cmuxterm.app.debug.sb.sync"
+        )
+        XCTAssertEqual(scoped?.lastPathComponent, "panel-history-com.cmuxterm.app.debug.sb.sync")
+        let id = UUID()
+        XCTAssertEqual(
+            SessionPanelHistoryStore.historyFileURL(
+                for: id,
+                appSupportDirectory: appSupport,
+                bundleIdentifier: "com.cmuxterm.app.debug.sb.sync"
+            )?.deletingLastPathComponent().standardizedFileURL,
+            scoped?.standardizedFileURL
+        )
+    }
+
+    /// Regression: launching a tagged Debug build (or the unit-test host) ran the
+    /// startup orphan sweep over the production app's shared `panel-history/`
+    /// directory and deleted every history file the dev build's snapshot did not
+    /// reference, i.e. all of the user's real per-pane history.
+    func testDevBuildOrphanSweepDoesNotDeleteProductionHistory() throws {
+        let appSupport = try makePanelHistoryTempAppSupport()
+        let productionDir = try XCTUnwrap(SessionPanelHistoryStore.historyDirectoryURL(
+            appSupportDirectory: appSupport,
+            bundleIdentifier: "com.cmuxterm.app"
+        ))
+        let productionFile = try writePanelHistoryFile(UUID(), in: productionDir)
+
+        SessionPanelHistoryStore.sweepOrphans(
+            referenced: [],
+            appSupportDirectory: appSupport,
+            bundleIdentifier: "com.cmuxterm.app.debug.sb.sync"
+        )
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: productionFile.path))
+    }
+
+    func testProductionOrphanSweepStillReapsItsOwnOrphans() throws {
+        let appSupport = try makePanelHistoryTempAppSupport()
+        let productionDir = try XCTUnwrap(SessionPanelHistoryStore.historyDirectoryURL(
+            appSupportDirectory: appSupport,
+            bundleIdentifier: "com.cmuxterm.app"
+        ))
+        let keptId = UUID()
+        let kept = try writePanelHistoryFile(keptId, in: productionDir)
+        let orphan = try writePanelHistoryFile(UUID(), in: productionDir)
+
+        SessionPanelHistoryStore.sweepOrphans(
+            referenced: [keptId],
+            appSupportDirectory: appSupport,
+            bundleIdentifier: "com.cmuxterm.app"
+        )
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: kept.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+    }
+
+    func testDeleteHistoryFileIsScopedToBundle() throws {
+        let appSupport = try makePanelHistoryTempAppSupport()
+        let id = UUID()
+        let productionDir = try XCTUnwrap(SessionPanelHistoryStore.historyDirectoryURL(
+            appSupportDirectory: appSupport,
+            bundleIdentifier: "com.cmuxterm.app"
+        ))
+        let productionFile = try writePanelHistoryFile(id, in: productionDir)
+
+        SessionPanelHistoryStore.deleteHistoryFile(
+            for: id,
+            appSupportDirectory: appSupport,
+            bundleIdentifier: "com.cmuxterm.app.debug.sb.sync"
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: productionFile.path))
+
+        SessionPanelHistoryStore.deleteHistoryFile(
+            for: id,
+            appSupportDirectory: appSupport,
+            bundleIdentifier: "com.cmuxterm.app"
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: productionFile.path))
+    }
+
     private struct LegacyPersistedWindowGeometry: Codable {
         let frame: SessionRectSnapshot
         let display: SessionDisplaySnapshot?
