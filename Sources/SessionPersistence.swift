@@ -2005,12 +2005,43 @@ enum SessionPanelHistoryStore {
     private static let directoryName = "panel-history"
     private static let fileExtension = "zsh_history"
 
+    /// Bundle whose history files keep the original, unscoped `panel-history/`
+    /// directory. Matches `SessionSnapshotRepository`'s default bundle id so the
+    /// shipped app keeps reading the files it wrote before scoping existed.
+    private static let productionBundleIdentifier = "com.cmuxterm.app"
+
+    /// Directory name for a bundle's history files. The production bundle uses
+    /// `panel-history`; every other bundle (tagged Debug builds, the unit-test
+    /// host, staging) gets `panel-history-<bundleId>`. Without this, a dev
+    /// build's startup orphan sweep deleted the production app's history files
+    /// because its own snapshot did not reference them.
+    static func directoryName(forBundleIdentifier bundleIdentifier: String?) -> String {
+        let trimmed = bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty, trimmed != productionBundleIdentifier else {
+            return directoryName
+        }
+        let safeBundleId = trimmed.replacingOccurrences(
+            of: "[^A-Za-z0-9._-]",
+            with: "_",
+            options: .regularExpression
+        )
+        return "\(directoryName)-\(safeBundleId)"
+    }
+
     /// Build the env var that points zsh/bash at the per-pane history file for
     /// this surface. Creates the parent directory on demand. Returns an empty
     /// dictionary if the directory cannot be created — the shell then falls
     /// back to its default global history file.
-    static func historyEnvironment(for historyFileId: UUID) -> [String: String] {
-        guard let url = historyFileURL(for: historyFileId) else { return [:] }
+    static func historyEnvironment(
+        for historyFileId: UUID,
+        appSupportDirectory: URL? = nil,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) -> [String: String] {
+        guard let url = historyFileURL(
+            for: historyFileId,
+            appSupportDirectory: appSupportDirectory,
+            bundleIdentifier: bundleIdentifier
+        ) else { return [:] }
         let directory = url.deletingLastPathComponent()
         do {
             try FileManager.default.createDirectory(
@@ -2024,44 +2055,59 @@ enum SessionPanelHistoryStore {
         return [environmentKey: url.path]
     }
 
-    static func historyFileURL(for historyFileId: UUID) -> URL? {
-        guard let appSupport = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first else {
-            return nil
-        }
-        return appSupport
-            .appendingPathComponent("cmux", isDirectory: true)
-            .appendingPathComponent(directoryName, isDirectory: true)
+    static func historyFileURL(
+        for historyFileId: UUID,
+        appSupportDirectory: URL? = nil,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) -> URL? {
+        historyDirectoryURL(appSupportDirectory: appSupportDirectory, bundleIdentifier: bundleIdentifier)?
             .appendingPathComponent(historyFileId.uuidString, isDirectory: false)
             .appendingPathExtension(fileExtension)
     }
 
-    /// Directory containing all per-pane history files. Used by the orphan
-    /// sweep at app start.
-    static func historyDirectoryURL() -> URL? {
-        guard let appSupport = FileManager.default
+    /// Directory containing this bundle's per-pane history files. Used by the
+    /// orphan sweep at app start.
+    static func historyDirectoryURL(
+        appSupportDirectory: URL? = nil,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) -> URL? {
+        guard let appSupport = appSupportDirectory ?? FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first else {
             return nil
         }
         return appSupport
             .appendingPathComponent("cmux", isDirectory: true)
-            .appendingPathComponent(directoryName, isDirectory: true)
+            .appendingPathComponent(directoryName(forBundleIdentifier: bundleIdentifier), isDirectory: true)
     }
 
     /// Delete the per-pane history file. No-op if the file does not exist or
     /// the path can't be resolved.
-    static func deleteHistoryFile(for historyFileId: UUID) {
-        guard let url = historyFileURL(for: historyFileId) else { return }
+    static func deleteHistoryFile(
+        for historyFileId: UUID,
+        appSupportDirectory: URL? = nil,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) {
+        guard let url = historyFileURL(
+            for: historyFileId,
+            appSupportDirectory: appSupportDirectory,
+            bundleIdentifier: bundleIdentifier
+        ) else { return }
         try? FileManager.default.removeItem(at: url)
     }
 
     /// Remove every history file whose UUID is NOT in `referenced`.
     /// Used at app start to reap files left behind by crashes, deleted
     /// workspaces, or other paths that bypassed normal cleanup.
-    static func sweepOrphans(referenced: Set<UUID>) {
-        guard let dir = historyDirectoryURL() else { return }
+    static func sweepOrphans(
+        referenced: Set<UUID>,
+        appSupportDirectory: URL? = nil,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) {
+        guard let dir = historyDirectoryURL(
+            appSupportDirectory: appSupportDirectory,
+            bundleIdentifier: bundleIdentifier
+        ) else { return }
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(
             at: dir,
