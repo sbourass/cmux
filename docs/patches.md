@@ -12,7 +12,7 @@ The live, machine-readable list is always:
 git log --oneline --no-merges v<upstream-base>..sb-main
 ```
 
-**Last synced upstream base:** `v0.64.25` (shipped as `v0.64.25-sb.1`)
+**Last synced upstream base:** `v0.65.0` (shipped as `v0.65.0-sb.1`)
 
 > Maintenance: this file is updated as part of every fork release — see
 > [fork-release.md](./fork-release.md) → "Shipping a release", step "Update patches.md".
@@ -128,7 +128,21 @@ These change cmux's runtime behavior versus upstream.
   (`add-zsh-hook precmd _cmux_history_init`), `HISTFILE` silently falls back to the shared
   global with no compile error — grep for it explicitly.
 
-  **Bundle scoping (fixed after `v0.64.25-sb.1`):** before the fix, `panel-history/` was
+  **v0.65.0 sync conflicts:** `Sources/AppDelegate.swift` again. Upstream rewrote
+  `finishPreparingStartupSessionSnapshot()` around a single decoded `primaryOutcome`, a
+  snapshot overwrite guard, scrollback checkpoints, and an early `guard … else { return }`
+  on restore policy. The fork's orphan sweep (load live + backup, sweep when either loaded)
+  now sits right after `prepareSessionScrollbackCheckpointsForLaunch(...)` and **before**
+  that guard, so a disabled restore still sweeps. Also combined parameter lists in
+  `Sources/Panels/TerminalPanel.swift` (upstream added `isRemoteTerminal:`),
+  `Sources/SessionPersistence.swift` and `Sources/Workspace.swift` (upstream added
+  `hasReceivedExplicitInput`), and the curated search entry (upstream added a
+  "Keep Local Sessions Alive" entry in the same slot). Terminal panes that upstream's new
+  paths create without passing `historyFileId` (for example dock terminals, whose
+  snapshot in `Sources/DockSplitStore+SessionSnapshot.swift` does not carry it) get a fresh
+  UUID on every restore, so their history does not persist.
+
+  **Bundle scoping (fixed after `v0.64.25-sb.1`, first shipped in `v0.65.0-sb.1`):** before the fix, `panel-history/` was
   shared by every bundle, so a tagged Debug build or the `cmux-unit` test host swept away the
   production app's history files at launch. Now only `com.cmuxterm.app` uses
   `panel-history/`; other bundles use `panel-history-<bundleId>/`, so no migration was
@@ -146,8 +160,10 @@ These change cmux's runtime behavior versus upstream.
     catalog key `app.sendAnonymousTelemetry` `defaultValue: false` (UserDefaults key
     `sendAnonymousTelemetry`). This is the fork's only behavioral change (upstream ships
     `true`).
-  - `Sources/cmuxApp.swift` — `TelemetrySettings.enabledForCurrentLaunch =
-    AppCatalogSection().sendAnonymousTelemetry.value(in: .standard)`. **Reads the catalog
+  - `Sources/TelemetrySettings.swift` (moved out of `Sources/cmuxApp.swift` by v0.65.0) —
+    `TelemetrySettings.enabledForCurrentLaunch = resolveEnabled(userOptIn:
+    AppCatalogSection().sendAnonymousTelemetry.value(in: .standard), policy:)`; an MDM
+    `DisableTelemetry` policy can only turn it further off. **Reads the catalog
     key directly**, so it and the Settings UI toggle both flow from the single catalog
     default above. This drives the send gate used by `SentryHelper`, `PostHogAnalytics`,
     `AppDelegate`, `GhosttyTerminalView`.
