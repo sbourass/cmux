@@ -131,16 +131,12 @@ jobs:
           export HOMEBREW_NO_AUTO_UPDATE=1
           export HOMEBREW_NO_INSTALL_CLEANUP=1
           export HOMEBREW_NO_ENV_HINTS=1
+          # Upstream's installer also pre-installs the Diff Sidecar's pinned
+          # toolchain (Native/DiffSidecar/rust-toolchain.toml). Without it the
+          # "Build Diff Sidecar" phase downloads that toolchain mid-build, and
+          # v0.64.25-sb.2 failed there with a rustup I/O error.
           export PATH="$HOME/.cargo/bin:$PATH"
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          if ! command -v rustup >/dev/null 2>&1; then
-            brew install rustup-init
-            rustup-init -y --profile minimal --default-toolchain stable
-          fi
-          if ! rustup show active-toolchain >/dev/null 2>&1; then
-            rustup default stable
-          fi
-          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          ./scripts/install-rust-ci.sh
           ./scripts/install-zig-ci.sh
           npm install --global "create-dmg@${CREATE_DMG_VERSION}"
 
