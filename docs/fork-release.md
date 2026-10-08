@@ -72,6 +72,17 @@ grep -lE 'tags:\s*(\["v\*"\]|$)' .github/workflows/*.yml | xargs grep -l 'v\*'
 gh workflow list --repo sbourass/cmux --all | grep -E 'Activation performance|^CI[[:space:]]'
 # Each should show "disabled_manually"
 
+# Upstream scheduled workflows still disabled? They need manaflow secrets, APIs, or
+# cloud (Cloud VM canary, required-checks drift, triage radar, ...) and fail or burn
+# runner minutes on the fork. All of them were disabled after the v0.65.0 sync
+# (21 workflows). Each sync can add new ones, so disable any that print here.
+# The fork's own workflows are not scheduled, so this never touches them.
+for f in $(grep -l '^\s*schedule:' .github/workflows/*.yml); do
+  b=$(basename "$f")
+  s=$(gh api "repos/sbourass/cmux/actions/workflows/$b" --jq .state 2>/dev/null)
+  [ "$s" = active ] && echo "$b" && gh workflow disable "$b" --repo sbourass/cmux
+done
+
 # Default branch still sb-main? (workflow_run depends on this)
 gh repo view sbourass/cmux --json defaultBranchRef --jq .defaultBranchRef.name
 # Expect: sb-main
@@ -161,6 +172,8 @@ git rebase "$LATEST"
 # resolve conflicts (see "Recurring conflict files" below)
 PATH="/opt/homebrew/opt/zig@0.15/bin:$PATH" ./scripts/reload.sh --tag sb-sync
 git push --force-with-lease origin sb-main
+# then re-run the scheduled-workflow loop from Preflight: the push makes any new
+# upstream schedule: workflow live on the fork
 ```
 
 After resolving conflicts, **re-verify every behavioral patch against the new base
