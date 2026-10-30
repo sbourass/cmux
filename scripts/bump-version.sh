@@ -25,8 +25,8 @@ if [[ ! -f "$PROJECT_FILE" ]]; then
   exit 1
 fi
 
-# Accept either plain X.Y.Z or X.Y.Z-sb.N
-VERSION_RE='^([0-9]+)\.([0-9]+)\.([0-9]+)(-sb\.([0-9]+))?$'
+# Accept X.Y.Z or X.Y.Z-sb.N, with an optional upstream hotfix component (X.Y.Z.H, e.g. 0.65.2.2-sb.1)
+VERSION_RE='^([0-9]+)\.([0-9]+)\.([0-9]+)(\.([0-9]+))?(-sb\.([0-9]+))?$'
 
 # Get current versions
 CURRENT_MARKETING=$(grep -m1 'MARKETING_VERSION = ' "$PROJECT_FILE" | sed 's/.*= \(.*\);/\1/')
@@ -37,17 +37,19 @@ echo "Current: MARKETING_VERSION=$CURRENT_MARKETING, CURRENT_PROJECT_VERSION=$CU
 
 # Parse current marketing version, with optional fork suffix
 if ! [[ "$CURRENT_MARKETING" =~ $VERSION_RE ]]; then
-  echo "Error: cannot parse MARKETING_VERSION='$CURRENT_MARKETING' (expected X.Y.Z or X.Y.Z-sb.N)" >&2
+  echo "Error: cannot parse MARKETING_VERSION='$CURRENT_MARKETING' (expected X.Y.Z[.H] or X.Y.Z[.H]-sb.N)" >&2
   exit 1
 fi
 MAJOR="${BASH_REMATCH[1]}"
 MINOR="${BASH_REMATCH[2]}"
 PATCH="${BASH_REMATCH[3]}"
+# Upstream hotfix component; kept on fork-suffix bumps, dropped on minor/major/patch bumps.
+HOTFIX="${BASH_REMATCH[4]:-}"
 HAS_SUFFIX=0
 SUFFIX_NUM=0
-if [[ -n "${BASH_REMATCH[4]:-}" ]]; then
+if [[ -n "${BASH_REMATCH[6]:-}" ]]; then
   HAS_SUFFIX=1
-  SUFFIX_NUM="${BASH_REMATCH[5]}"
+  SUFFIX_NUM="${BASH_REMATCH[7]}"
 fi
 
 # Keep Sparkle build numbers monotonic with the latest published stable appcast.
@@ -69,7 +71,7 @@ fi
 # Determine new marketing version
 if [[ $# -eq 0 ]]; then
   if (( HAS_SUFFIX )); then
-    NEW_MARKETING="$MAJOR.$MINOR.$PATCH-sb.$((SUFFIX_NUM + 1))"
+    NEW_MARKETING="$MAJOR.$MINOR.$PATCH$HOTFIX-sb.$((SUFFIX_NUM + 1))"
   else
     NEW_MARKETING="$MAJOR.$((MINOR + 1)).0"
   fi
@@ -81,7 +83,7 @@ elif [[ "$1" == "minor" ]]; then
   fi
 elif [[ "$1" == "patch" ]]; then
   if (( HAS_SUFFIX )); then
-    NEW_MARKETING="$MAJOR.$MINOR.$PATCH-sb.$((SUFFIX_NUM + 1))"
+    NEW_MARKETING="$MAJOR.$MINOR.$PATCH$HOTFIX-sb.$((SUFFIX_NUM + 1))"
   else
     NEW_MARKETING="$MAJOR.$MINOR.$((PATCH + 1))"
   fi
@@ -95,7 +97,7 @@ elif [[ "$1" =~ $VERSION_RE ]]; then
   NEW_MARKETING="$1"
 else
   echo "Usage: $0 [version|minor|patch|major]" >&2
-  echo "  version: X.Y.Z or X.Y.Z-sb.N (e.g., 0.16.0 or 0.64.7-sb.1)" >&2
+  echo "  version: X.Y.Z[.H] or X.Y.Z[.H]-sb.N (e.g., 0.16.0, 0.64.7-sb.1 or 0.65.2.2-sb.1)" >&2
   echo "  minor:   bump minor (resets fork suffix to -sb.1 when present)" >&2
   echo "  patch:   bump patch (or fork suffix counter when present)" >&2
   echo "  major:   bump major (resets fork suffix to -sb.1 when present)" >&2
